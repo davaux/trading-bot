@@ -2,26 +2,24 @@ package com.company.indicators;
 
 import com.company.BotCandle;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
-import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.math3.stat.StatUtils;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
-import java.util.Queue;
-import java.util.stream.Collectors;
 
 public class IndicatorATR extends TechnicalIndicator {
 
   private boolean smoothedATR = false;
   private final CircularFifoQueue<BotCandle> candles;
   private final CircularFifoQueue<Double> trQueue;
-  private final CircularFifoQueue<Double> atrQueue;
+  private final List<Double> atrResults;
   private IndicatorSMA sma;
 
   public IndicatorATR(int periods) {
     super(periods, CandlePrice.CLOSE);
     candles = new CircularFifoQueue<>(periods);
     trQueue = new CircularFifoQueue<>(periods);
-    atrQueue = new CircularFifoQueue<>(periods);
+    atrResults = new ArrayList<>();
     sma = new IndicatorSMA(periods, CandlePrice.CLOSE);
   }
 
@@ -34,17 +32,18 @@ public class IndicatorATR extends TechnicalIndicator {
     if (!smoothedATR) {
       final BotCandle botCandle = new BotCandle();
       botCandle.setClose(trQueue.get(trQueue.size() - 1));
-      final Optional<Double> atrMovingAverage = sma.calculateMovingAverage(botCandle);
+      final Optional<Double> atrMovingAverage = sma.calculate(botCandle);
       if (atrMovingAverage.isPresent()) {
         smoothedATR = true;
         return atrMovingAverage;
       }
       return Optional.empty();
     }
-    return Optional.of(((atrQueue.get(atrQueue.size() - 1) * 13) + trQueue.get(trQueue.size() - 1)) / getPeriods());
+    return Optional.of(((atrResults.get(atrResults.size() - 1) * 13) + trQueue.get(trQueue.size() - 1)) / getPeriods());
   }
 
-  public Optional<Double> calculateATR(BotCandle candle) {
+  @Override
+  public Optional<Double> calculate(BotCandle candle) {
     final Optional<Double> atr;
     candles.add(candle);
     // True range calculation
@@ -58,7 +57,7 @@ public class IndicatorATR extends TechnicalIndicator {
     // True range calculation
     calculateTR(candleHigh, candleLow, priorClose).ifPresent(aDouble -> trQueue.add(aDouble));
     Optional<Double> atrOptional = calculateATR();
-    atrOptional.ifPresent(aDouble -> atrQueue.add(aDouble));
+    atrOptional.ifPresent(aDouble -> atrResults.add(aDouble));
     return atrOptional;
   }
 
@@ -73,8 +72,8 @@ public class IndicatorATR extends TechnicalIndicator {
     return Optional.of(tr);
   }
 
-  public CircularFifoQueue<Double> getAtrQueue() {
-    return atrQueue;
+  public List<Double> getAtrResults() {
+    return atrResults;
   }
 
   public CircularFifoQueue<Double> getTrQueue() {

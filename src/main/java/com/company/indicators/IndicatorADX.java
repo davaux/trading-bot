@@ -3,11 +3,13 @@ package com.company.indicators;
 import com.company.BotCandle;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 public class IndicatorADX extends TechnicalIndicator {
   private final CircularFifoQueue<BotCandle> candles;
-  private final CircularFifoQueue<Double> adxQueue;
+  private final List<Double> adxResults;
   private final CircularFifoQueue<Double> smoothTRQueue;
   private final CircularFifoQueue<Double> highDMQueue;
   private final CircularFifoQueue<Double> lowDMQueue;
@@ -21,7 +23,7 @@ public class IndicatorADX extends TechnicalIndicator {
   public IndicatorADX(int periods) {
     super(periods, CandlePrice.CLOSE);
     candles = new CircularFifoQueue<>(periods);
-    adxQueue = new CircularFifoQueue<>(periods);
+    adxResults = new ArrayList<>();
     smoothTRQueue = new CircularFifoQueue<>(periods);
     highDMQueue = new CircularFifoQueue<>(periods);
     lowDMQueue = new CircularFifoQueue<>(periods);
@@ -71,13 +73,13 @@ public class IndicatorADX extends TechnicalIndicator {
 
     final BotCandle botCandleHighDM = new BotCandle();
     botCandleHighDM.setHigh(highDMValue);
-    final Optional<Double> emaHighDMOpt = indicatorEMAHighDM.calculateEMA(botCandleHighDM);
+    final Optional<Double> emaHighDMOpt = indicatorEMAHighDM.calculate(botCandleHighDM);
 
     final BotCandle botCandleLowDM = new BotCandle();
     botCandleLowDM.setLow(lowDMValue);
-    final Optional<Double> emaLowDMOpt = indicatorEMALowDM.calculateEMA(botCandleLowDM);
+    final Optional<Double> emaLowDMOpt = indicatorEMALowDM.calculate(botCandleLowDM);
 
-    final Optional<Double> atr = indicatorATR.calculateATR(candle);
+    final Optional<Double> atr = indicatorATR.calculate(candle);
 
     if (!emaHighDMOpt.isPresent() && !emaLowDMOpt.isPresent() && !atr.isPresent()) {
       return Optional.empty();
@@ -114,12 +116,12 @@ public class IndicatorADX extends TechnicalIndicator {
     double dx = 100 * (diffDI / sumDI); // directional index
     BotCandle candleDX = new BotCandle();
     candleDX.setClose(dx);
-    final Optional<Double> dxSmaOpt = indicatorSMA.calculateMovingAverage(candleDX);
-    dxSmaOpt.ifPresent(aDouble -> adxQueue.add(aDouble));
+    final Optional<Double> dxSmaOpt = indicatorSMA.calculate(candleDX);
+    dxSmaOpt.ifPresent(aDouble -> adxResults.add(aDouble));
     return dxSmaOpt;
   }
 
-  public CircularFifoQueue<Double> getAdxQueue() {
-    return adxQueue;
+  public List<Double> getAdxResults() {
+    return adxResults;
   }
 }

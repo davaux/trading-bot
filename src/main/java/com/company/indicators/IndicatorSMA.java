@@ -5,20 +5,23 @@ import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.math3.stat.StatUtils;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class IndicatorSMA extends TechnicalIndicator {
   private final CircularFifoQueue<BotCandle> candles;
-  private final CircularFifoQueue<Double> smaQueue;
+  private final List<Double> smaResults;
 
   public IndicatorSMA(int periods, CandlePrice candlePrice) {
     super(periods, candlePrice);
     candles = new CircularFifoQueue<>(periods);
-    smaQueue = new CircularFifoQueue<>(periods);
+    smaResults = new ArrayList<>();
   }
 
-  public Optional<Double> calculateMovingAverage(BotCandle candle) {
+  @Override
+  public Optional<Double> calculate(BotCandle candle) {
     candles.add(candle);
     if (candles.size() < getPeriods()) {
       return Optional.empty();
@@ -31,7 +34,7 @@ public class IndicatorSMA extends TechnicalIndicator {
             .collect(Collectors.toList())
             .toArray(new Double[candles.size()]));
     final Optional<Double> optMA = Optional.of(StatUtils.mean(toArray));
-    optMA.ifPresent(aDouble -> smaQueue.add(aDouble));
+    optMA.ifPresent(aDouble -> smaResults.add(aDouble));
     return optMA;
   }
 
@@ -50,7 +53,7 @@ public class IndicatorSMA extends TechnicalIndicator {
     }
   }
 
-  public CircularFifoQueue<Double> getSmaQueue() {
-    return smaQueue;
+  public List<Double> getSmaResults() {
+    return smaResults;
   }
 }

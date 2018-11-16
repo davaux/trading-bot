@@ -33,10 +33,11 @@ public class Main {
         //getFromCryptoCompare();
         //getFromBitfinex();
         new Manager().runBot();
+
+//        new ManagerOpt().runBot();
     }
 
     private static void getFromBitfinex() throws URISyntaxException, IOException, InterruptedException {
-        CloseableHttpClient httpClient = HttpClients.createDefault();
         //LocalDateTime date = LocalDateTime.now().minusDays(7);
         //Timestamp t = Timestamp.valueOf(date);
         long startDate = 1483228800 * 1000;
@@ -82,8 +83,11 @@ public class Main {
                 return jsonObject;
             };
 
-            System.out.println("Executing request " + httpget.getRequestLine());
-            JSONArray execute = httpClient.execute(httpget, rh);
+            JSONArray execute;
+            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+                System.out.println("Executing request " + httpget.getRequestLine());
+                execute = httpClient.execute(httpget, rh);
+            }
 
             Collection<BotCandle> botCandles = new ArrayList<>();
             for(int x = 0; x < execute.length(); x++) {
@@ -106,7 +110,6 @@ public class Main {
     }
 
     private static void getFromCryptoCompare() throws URISyntaxException, IOException, InterruptedException {
-        CloseableHttpClient httpClient = HttpClients.createDefault();
         //LocalDateTime date = LocalDateTime.now().minusDays(7);
         LocalDateTime date = LocalDateTime.now().minusYears(1);
         //Timestamp t = Timestamp.valueOf(date);
@@ -151,8 +154,11 @@ public class Main {
                 return jsonObject;
             };
 
-            System.out.println("Executing request " + httpget.getRequestLine());
-            JSONObject execute = httpClient.execute(httpget, rh);
+            JSONObject execute;
+            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+                System.out.println("Executing request " + httpget.getRequestLine());
+                execute = httpClient.execute(httpget, rh);
+            }
 
             Type collectionType = new TypeToken<Collection<BotCandle>>(){}.getType();
             Collection<BotCandle> botCandles = gson.fromJson(execute.getJSONArray("Data").toString(), collectionType);

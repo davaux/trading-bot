@@ -2,6 +2,9 @@ package com.company;
 
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class BotStrategy {
   private final CircularFifoQueue<BotCandle> candlesQueue;
   private boolean openLong = false;
@@ -13,11 +16,32 @@ public class BotStrategy {
   private double currentSMAValue = 0.0;
   private double currentADXValue = 0.0;
   private double currentATRValue = 0.0;
+  private int successes = 0;
+  private int losses = 0;
+  private List<Double> profits;
+  private List<Double> profitPercentages;
+  private double kelly = 0.25;
 
+  public double getKelly() {
+    return kelly;
+  }
 
+  public void setKelly(double kelly) {
+    this.kelly = kelly;
+  }
 
   public BotStrategy(int maPeriods) {
     candlesQueue = new CircularFifoQueue<>(maPeriods);
+    profits = new ArrayList<>();
+    profitPercentages = new ArrayList<>();
+  }
+
+  public void addProfit(double profit) {
+    profits.add(profit);
+  }
+
+  public void addProfitPercentage(double pct) {
+    profitPercentages.add(pct);
   }
 
   public boolean addCandle(final BotCandle candle) {
@@ -111,7 +135,30 @@ public class BotStrategy {
     this.entryPrice = entryPrice;
   }
 
-  /*public void addTrQueue(double tr) {
+  public int getSuccesses() {
+    return successes;
+  }
+
+  public void setSuccesses(int successes) {
+    this.successes = successes;
+  }
+
+  public int getLosses() {
+    return losses;
+  }
+
+  public void setLosses(int losses) {
+    this.losses = losses;
+  }
+/*public void addTrQueue(double tr) {
     trQueue.add(tr);
   }*/
+
+  public List<Double> getProfits() {
+    return profits;
+  }
+
+  public List<Double> getProfitPercentages() {
+    return profitPercentages;
+  }
 }

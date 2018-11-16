@@ -24,10 +24,10 @@ public class IndicatorEMATest {
     for (int i = 0; i < closePrice.length; i++) {
       BotCandle botCandle = new BotCandle();
       botCandle.setClose(closePrice[i]);
-      indicatorEMA.calculateEMA(botCandle);
+      indicatorEMA.calculate(botCandle);
     }
-    Assert.assertEquals(2, indicatorEMA.getEmaQueue().size());
-    Assert.assertEquals(22.221, indicatorEMA.getEmaQueue().get(0), 0.0000001);
-    Assert.assertEquals(22.2080909, indicatorEMA.getEmaQueue().get(1), 0.0000001);
+    Assert.assertEquals(2, indicatorEMA.getEmaResults().size());
+    Assert.assertEquals(22.221, indicatorEMA.getEmaResults().get(0), 0.0000001);
+    Assert.assertEquals(22.2080909, indicatorEMA.getEmaResults().get(1), 0.0000001);
   }
 }

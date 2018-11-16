@@ -31,7 +31,7 @@ public class IndicatorADXTest {
       botCandle.setClose(closePrice[i]);
       indicatorATR.calculate(botCandle);
     }
-    Assert.assertEquals(2, indicatorATR.getAdxQueue().size());
-    Assert.assertEquals(33.58, indicatorATR.getAdxQueue().get(0), 0.0000001);
+    Assert.assertEquals(2, indicatorATR.getAdxResults().size());
+    Assert.assertEquals(33.58, indicatorATR.getAdxResults().get(0), 0.0000001);
   }
 }

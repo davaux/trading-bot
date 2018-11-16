@@ -31,9 +31,9 @@ public class IndicatorATRTest {
       botCandle.setHigh(highPrice[i]);
       botCandle.setLow(lowPrice[i]);
       botCandle.setClose(closePrice[i]);
-      indicatorATR.calculateATR(botCandle);
+      indicatorATR.calculate(botCandle);
     }
-    Assert.assertEquals(2, indicatorATR.getAtrQueue().size());
-    Assert.assertEquals(0.5542857, indicatorATR.getAtrQueue().get(0), 0.0000001);
+    Assert.assertEquals(2, indicatorATR.getAtrResults().size());
+    Assert.assertEquals(0.5542857, indicatorATR.getAtrResults().get(0), 0.0000001);
   }
 }
