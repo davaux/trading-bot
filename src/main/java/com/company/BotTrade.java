@@ -26,8 +26,63 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class BotTrade {
-  private double initAmount = 10000;
+  private double initAmount = 0.02;
   private Map<String, Double> reserved = new HashMap<>();
+
+  public BotTrade() {
+
+  }
+
+  public void getTicker(String pair, GetRequestCallback callback) {
+    URI uri = null;
+    List<JSONArray> history = new ArrayList<>();
+    try {
+      uri = new URIBuilder()
+              .setScheme("https")
+              .setHost("api.bitfinex.com")
+              .setPath("/v2/ticker/t" + pair)
+              .build();
+    } catch (URISyntaxException e) {
+      System.out.println("Problem with uri " + e.getMessage());
+    }
+
+    HttpGet httpget = new HttpGet(uri);
+    try {
+      ResponseHandler<JSONArray> rh = response -> {
+        StatusLine statusLine = response.getStatusLine();
+        HttpEntity entity = response.getEntity();
+        if (statusLine.getStatusCode() >= 300) {
+          throw new HttpResponseException(
+                  statusLine.getStatusCode(),
+                  statusLine.getReasonPhrase());
+        }
+        if (entity == null) {
+          throw new ClientProtocolException("Response contains no content");
+        }
+
+        ContentType contentType = ContentType.getOrDefault(entity);
+        Charset charset = contentType.getCharset();
+        final InputStream content = entity.getContent();
+        String collect = new BufferedReader(new InputStreamReader(content, charset))
+                .lines().collect(Collectors.joining("\n"));
+        content.close();
+        //System.out.println(collect);
+        JSONArray jsonObject = new JSONArray(collect);
+        return jsonObject;
+      };
+
+      try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+        System.out.println("Executing request " + httpget.getRequestLine());
+        final JSONArray execute = httpClient.execute(httpget, rh);
+        if (execute != null) {
+          history.add(execute);
+        }
+      }
+      callback.responseHandler(pair, history);
+    } catch (IOException e) {
+      System.err.println(e.getMessage() + " for pair " + pair);
+    }
+  }
 
   public void getHistData(String pair, GetRequestCallback callback) {
     long now = System.currentTimeMillis();
@@ -39,80 +94,69 @@ public class BotTrade {
     long startDate = /*1483228800 => 2017/01/01*/(timeFrameLengthInSec - (now / 1000) % timeFrameLengthInSec + (now / 1000) - (limit + 1) * timeFrameLengthInSec) * 1000;
     List<JSONArray> history = new ArrayList<>();
     boolean stop = false;
-    long oldStartDate = startDate;
-    while (startDate < now && !stop) {
-      System.out.println("Start date " + startDate);
-      URI uri = null;
-      try {
-        uri = new URIBuilder()
-                .setScheme("https")
-                .setHost("api.bitfinex.com")
-                .setPath("/v2/candles/trade:" + timeFrame + ":t" + pair + "/hist")
-                .setParameter("sort", String.valueOf(1))
-                .setParameter("limit", String.valueOf(limit))
-                .setParameter("start", String.valueOf(startDate))
-                .build();
-      } catch (URISyntaxException e) {
-        System.out.println("Problem with uri " + e.getMessage());
-      }
-
-      HttpGet httpget = new HttpGet(uri);
-      try {
-        ResponseHandler<JSONArray> rh = response -> {
-          StatusLine statusLine = response.getStatusLine();
-          HttpEntity entity = response.getEntity();
-          if (statusLine.getStatusCode() >= 300) {
-            throw new HttpResponseException(
-                    statusLine.getStatusCode(),
-                    statusLine.getReasonPhrase());
-          }
-          if (entity == null) {
-            throw new ClientProtocolException("Response contains no content");
-          }
-
-          ContentType contentType = ContentType.getOrDefault(entity);
-          Charset charset = contentType.getCharset();
-          final InputStream content = entity.getContent();
-          String collect = new BufferedReader(new InputStreamReader(content, charset))
-                  .lines().collect(Collectors.joining("\n"));
-          content.close();
-          System.out.println(collect);
-          JSONArray jsonObject = new JSONArray(collect);
-          return jsonObject;
-        };
-
-        JSONArray execute;
-        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
-          System.out.println("Executing request " + httpget.getRequestLine());
-          execute = httpClient.execute(httpget, rh);
-
-          for (int i = 0; i < execute.length(); i++) {
-            final JSONArray jsonArray = execute.getJSONArray(i);
-            history.add(jsonArray);
-            if(i == execute.length() - 1) {
-              final long time = jsonArray.getLong(0);
-              System.out.println("Last element time " + time);
-              oldStartDate = startDate;
-              startDate = ((timeFrameLengthInSec * 1000) - time % (timeFrameLengthInSec * 1000) + time - (limit + 1) * (timeFrameLengthInSec * 1000));
-              stop = oldStartDate == startDate;
-            }
-          }
-        }
-        try {
-          Thread.sleep(5000);
-        } catch (InterruptedException e) {
-          e.printStackTrace();
-        }
-      } catch (IOException e) {
-        System.out.println(e.getMessage());
-      }
+    System.out.println("Start date " + startDate);
+    URI uri = null;
+    try {
+      uri = new URIBuilder()
+              .setScheme("https")
+              .setHost("api.bitfinex.com")
+              .setPath("/v2/candles/trade:" + timeFrame + ":t" + pair + "/hist")
+              .setParameter("sort", String.valueOf(1))
+              .setParameter("limit", String.valueOf(limit))
+              .setParameter("start", String.valueOf(startDate))
+              .build();
+    } catch (URISyntaxException e) {
+      System.out.println("Problem with uri " + e.getMessage());
     }
-    new Thread(new Runnable() {
-      @Override
-      public void run() {
-        callback.responseHandler(pair, history);
+
+    HttpGet httpget = new HttpGet(uri);
+    try {
+      ResponseHandler<JSONArray> rh = response -> {
+        StatusLine statusLine = response.getStatusLine();
+        HttpEntity entity = response.getEntity();
+        if (statusLine.getStatusCode() >= 300) {
+          throw new HttpResponseException(
+                  statusLine.getStatusCode(),
+                  statusLine.getReasonPhrase());
+        }
+        if (entity == null) {
+          throw new ClientProtocolException("Response contains no content");
+        }
+
+        ContentType contentType = ContentType.getOrDefault(entity);
+        Charset charset = contentType.getCharset();
+        final InputStream content = entity.getContent();
+        String collect = new BufferedReader(new InputStreamReader(content, charset))
+                .lines().collect(Collectors.joining("\n"));
+        content.close();
+        System.out.println(collect);
+        JSONArray jsonObject = new JSONArray(collect);
+        return jsonObject;
+      };
+
+      JSONArray execute;
+      try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+        System.out.println("Executing request " + httpget.getRequestLine());
+        execute = httpClient.execute(httpget, rh);
+
+        for (int i = 0; i < execute.length(); i++) {
+          final JSONArray jsonArray = execute.getJSONArray(i);
+          history.add(jsonArray);
+          if (i == execute.length() - 1) {
+            final long time = jsonArray.getLong(0);
+            System.out.println("Last element time " + time);
+          }
+        }
       }
-    }).start();
+      try {
+        Thread.sleep(5000);
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+    } catch (IOException e) {
+      System.out.println(e.getMessage());
+    }
+    callback.responseHandler(pair, history);
 //        ((Runnable) () -> callback.responseHandler(pair, sb.toString())).run();
   }
 

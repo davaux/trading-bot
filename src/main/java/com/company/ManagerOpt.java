@@ -49,7 +49,7 @@ public class ManagerOpt {
     indicatorADX = new IndicatorADX(adxPeriods);
     pairs = new HashMap<>(PAIRS_ARR.length);
     for (String pair : PAIRS_ARR) {
-      pairs.put(pair, new BotStrategy(maPeriods));
+      pairs.put(pair, new BotStrategy(maPeriods, atrPeriods14, adxPeriods));
     }
   }
 

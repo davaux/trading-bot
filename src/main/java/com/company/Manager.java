@@ -6,19 +6,23 @@ import com.company.indicators.IndicatorSMA;
 import com.company.indicators.TechnicalIndicator;
 import org.json.JSONArray;
 
+import java.awt.desktop.SystemSleepEvent;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class Manager {
 
   public static final String[] PAIRS_ARR = {
-          /*"IOTABTC", */"XRPBTC"/*, "BTCUSD", "LTCBTC", "ETHBTC",
+          "IOTABTC", "XRPBTC"/*, "BTCUSD"*/, "LTCBTC", "ETHBTC",
           "NEOBTC", "EOSBTC", "XLMBTC", "TRXBTC", "QTUMBTC",
-          "XTZBTC", "XVGBTC", "VETBTC"*/};
+          "XTZBTC", "XVGBTC", "VETBTC"};
   private Map<String, BotStrategy> pairs;
   public static final int maPeriods20 = 20;
   public static final int adxPeriods14 = 14;
@@ -28,25 +32,20 @@ public class Manager {
   private int success = 0;
   private int loss = 0;
   private double trendStrength = 25;
-  private IndicatorATR indicatorATR;
-  private IndicatorSMA indicatorSMA;
-  private IndicatorADX indicatorADX;
   private final double accountRiskCoeff = 0.01; // 1%
+  ScheduledExecutorService scheduler
+          = Executors.newSingleThreadScheduledExecutor();
 
   public Manager() {
+    System.out.println("Initializing bot");
     pairs = new HashMap<>(PAIRS_ARR.length);
     for (String pair : PAIRS_ARR) {
-      Map<String, List<BotCandle>> marketData = new HashMap<>();
       botTrade.getHistData(pair, new GetRequestCallback() {
         @Override
         public void responseHandler(String resppair, List<JSONArray> candles) {
-          indicatorATR = new IndicatorATR(atrPeriods14);
-          indicatorSMA = new IndicatorSMA(maPeriods20, TechnicalIndicator.CandlePrice.CLOSE);
-          indicatorADX = new IndicatorADX(adxPeriods14);
-          pairs.put(resppair, new BotStrategy(maPeriods20));
 
           final Iterator<JSONArray> iterator = candles.iterator();
-          List<BotCandle>  botCandles = new ArrayList<>(candles.size());
+          List<BotCandle> botCandles = new ArrayList<>(candles.size());
           while (iterator.hasNext()) {
             final JSONArray next = iterator.next();
             BotCandle botCandle = new BotCandle();
@@ -59,9 +58,9 @@ public class Manager {
             botCandles.add(botCandle);
           }
           System.out.println(pair + " " + resppair + " " + botCandles.size());
-          indicatorATR.init(botCandles);
-          indicatorSMA.init(botCandles);
-          indicatorADX.init(botCandles);
+          final BotStrategy value = new BotStrategy(maPeriods20, atrPeriods14, adxPeriods14);
+          value.initIndicator(botCandles);
+          pairs.put(resppair, value);
         }
       });
       try {
@@ -73,6 +72,42 @@ public class Manager {
   }
 
   public void runBot() throws FileNotFoundException {
+
+    int periodInMilli = 900 * 1000; // 15 minutes
+    long delay = periodInMilli - (System.currentTimeMillis() % periodInMilli);
+    System.out.println("Trading starts in " + delay/60000 + " minutes");
+
+    for (String pair : PAIRS_ARR) {
+      Runnable task = new Runnable() {
+        @Override
+        public void run() {
+          botTrade.getTicker(pair, new GetRequestCallback() {
+            @Override
+            public void responseHandler(String pair, List<JSONArray> history) {
+              final JSONArray next = history.get(0);
+              System.out.println(next.toString());
+              BotCandle botCandle = new BotCandle();
+              botCandle.setLastPrice(next.getDouble(6));
+              botCandle.setClose(botCandle.getLastPrice());
+              botCandle.setHigh(next.getDouble(8));
+              botCandle.setLow(next.getDouble(9));
+
+              if (botCandle.getLastPrice() > botCandle.getHigh()) {
+                botCandle.setHigh(botCandle.getLastPrice());
+              }
+              if (botCandle.getLastPrice() < botCandle.getLow()) {
+                botCandle.setLow(botCandle.getLastPrice());
+              }
+              final BotStrategy botStrategyData = pairs.get(pair);
+              botStrategyData.updateIndicator(pair, botCandle);
+              findTradeOpportunity(pair, botStrategyData, botCandle.getTime());
+            }
+          });
+        }
+      };
+      scheduler.scheduleAtFixedRate(task, delay, periodInMilli, TimeUnit.MILLISECONDS);
+    }
+
 
     /*Map<String, List<BotCandle>> marketData = new HashMap<>();
     final Type BOTCANDLE_TYPE = new TypeToken<List<BotCandle>>() {
@@ -117,6 +152,21 @@ public class Manager {
       }
     }*/
   }
+
+  /*private void updateIndicator(String pair, BotCandle botCandle) {
+    final BotStrategy botStrategyData = pairs.get(pair);
+    botStrategyData.addCandle(botCandle);
+    indicatorSMA.calculate(botCandle).ifPresent(sma -> {
+      botStrategyData.setPreviousSMAValue(botStrategyData.getCurrentSMAValue());
+      botStrategyData.setCurrentSMAValue(sma);
+    });
+    indicatorATR.calculate(botCandle).ifPresent(atr -> botStrategyData.setCurrentATRValue(atr));
+    indicatorADX.calculate(botCandle).ifPresent(adx -> botStrategyData.setCurrentADXValue(adx));
+//              if (i >= maPeriods20) {
+    System.out.println(botCandle.getTime() + " " + "BotStrategy : " + pair + " moving average : " + botStrategyData.getCurrentSMAValue() + " closing price " + botCandle.getClose());
+//              }
+    findTradeOpportunity(pair, botStrategyData, botCandle.getTime());
+  }*/
 
   /**
    * Data analyser
@@ -279,7 +329,7 @@ public class Manager {
         botStrategyData.setKelly(Math.abs((winning - (1 - winning) / lossRatio) / 2.0));
       }
     }
-    
+
     double kellyPositionSize = (botTrade.getInitAmount() * botStrategyData.getKelly()) / price;
 
     double tradeRisk = 0;

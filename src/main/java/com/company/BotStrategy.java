@@ -1,5 +1,9 @@
 package com.company;
 
+import com.company.indicators.IndicatorADX;
+import com.company.indicators.IndicatorATR;
+import com.company.indicators.IndicatorSMA;
+import com.company.indicators.TechnicalIndicator;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 
 import java.util.ArrayList;
@@ -21,6 +25,9 @@ public class BotStrategy {
   private List<Double> profits;
   private List<Double> profitPercentages;
   private double kelly = 0.25;
+  private IndicatorATR indicatorATR;
+  private IndicatorSMA indicatorSMA;
+  private IndicatorADX indicatorADX;
 
   public double getKelly() {
     return kelly;
@@ -30,8 +37,11 @@ public class BotStrategy {
     this.kelly = kelly;
   }
 
-  public BotStrategy(int maPeriods) {
+  public BotStrategy(int maPeriods, int atrPeriods, int adxPeriods) {
     candlesQueue = new CircularFifoQueue<>(maPeriods);
+    indicatorATR = new IndicatorATR(atrPeriods);
+    indicatorSMA = new IndicatorSMA(maPeriods, TechnicalIndicator.CandlePrice.CLOSE);
+    indicatorADX = new IndicatorADX(adxPeriods);
     profits = new ArrayList<>();
     profitPercentages = new ArrayList<>();
   }
@@ -160,5 +170,24 @@ public class BotStrategy {
 
   public List<Double> getProfitPercentages() {
     return profitPercentages;
+  }
+
+  public void updateIndicator(String pair, BotCandle botCandle) {
+    addCandle(botCandle);
+    indicatorSMA.calculate(botCandle).ifPresent(sma -> {
+      setPreviousSMAValue(getCurrentSMAValue());
+      setCurrentSMAValue(sma);
+    });
+    indicatorATR.calculate(botCandle).ifPresent(atr -> setCurrentATRValue(atr));
+    indicatorADX.calculate(botCandle).ifPresent(adx -> setCurrentADXValue(adx));
+//              if (i >= maPeriods20) {
+    System.out.println(botCandle.getTime() + " " + "BotStrategy : " + pair + " moving average : " + getCurrentSMAValue() + " closing price " + botCandle.getClose());
+//              }
+  }
+
+  public void initIndicator(List<BotCandle> botCandles) {
+    indicatorADX.init(botCandles);
+    indicatorATR.init(botCandles);
+    indicatorSMA.init(botCandles);
   }
 }

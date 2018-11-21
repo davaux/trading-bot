@@ -11,6 +11,7 @@ public class BotCandle {
     private double open;
     private double volumeFrom;
     private double volumeTo;
+    private double lastPrice;
 
     public void setTime(long time) {
         this.time = time;
@@ -66,6 +67,14 @@ public class BotCandle {
 
     public double getVolumeTo() {
         return volumeTo;
+    }
+
+    public double getLastPrice() {
+        return lastPrice;
+    }
+
+    public void setLastPrice(double lastPrice) {
+        this.lastPrice = lastPrice;
     }
 
     @Override
