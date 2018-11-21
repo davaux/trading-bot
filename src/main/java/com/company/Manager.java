@@ -1,12 +1,7 @@
 package com.company;
 
-import com.company.indicators.IndicatorADX;
-import com.company.indicators.IndicatorATR;
-import com.company.indicators.IndicatorSMA;
-import com.company.indicators.TechnicalIndicator;
 import org.json.JSONArray;
 
-import java.awt.desktop.SystemSleepEvent;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -23,7 +18,7 @@ public class Manager {
           "IOTABTC", "XRPBTC"/*, "BTCUSD"*/, "LTCBTC", "ETHBTC",
           "NEOBTC", "EOSBTC", "XLMBTC", "TRXBTC", "QTUMBTC",
           "XTZBTC", "XVGBTC", "VETBTC"};
-  private Map<String, BotStrategy> pairs;
+  private Map<String, TradingStrategy> pairs;
   public static final int maPeriods20 = 20;
   public static final int adxPeriods14 = 14;
   public static final int atrPeriods14 = 14;
@@ -58,7 +53,7 @@ public class Manager {
             botCandles.add(botCandle);
           }
           System.out.println(pair + " " + resppair + " " + botCandles.size());
-          final BotStrategy value = new BotStrategy(maPeriods20, atrPeriods14, adxPeriods14);
+          final TradingStrategy value = new BotStrategy(maPeriods20, atrPeriods14, adxPeriods14);
           value.initIndicator(botCandles);
           pairs.put(resppair, value);
         }
@@ -75,7 +70,7 @@ public class Manager {
 
     int periodInMilli = 900 * 1000; // 15 minutes
     long delay = periodInMilli - (System.currentTimeMillis() % periodInMilli);
-    System.out.println("Trading starts in " + delay/60000 + " minutes");
+    System.out.println("Trading starts in " + delay / 60000 + " minutes");
 
     for (String pair : PAIRS_ARR) {
       Runnable task = new Runnable() {
@@ -98,7 +93,7 @@ public class Manager {
               if (botCandle.getLastPrice() < botCandle.getLow()) {
                 botCandle.setLow(botCandle.getLastPrice());
               }
-              final BotStrategy botStrategyData = pairs.get(pair);
+              final TradingStrategy botStrategyData = pairs.get(pair);
               botStrategyData.updateIndicator(pair, botCandle);
               findTradeOpportunity(pair, botStrategyData, botCandle.getTime());
             }
@@ -107,101 +102,38 @@ public class Manager {
       };
       scheduler.scheduleAtFixedRate(task, delay, periodInMilli, TimeUnit.MILLISECONDS);
     }
-
-
-    /*Map<String, List<BotCandle>> marketData = new HashMap<>();
-    final Type BOTCANDLE_TYPE = new TypeToken<List<BotCandle>>() {
-    }.getType();
-    Gson gson = new Gson();
-    String timeFrame = "15m";
-    for (String pair : PAIRS_ARR) {
-      JsonReader jsonReader = null;
-      FileReader fileReader = null;
-      try {
-        fileReader = new FileReader("BFX_" + pair + "_" + timeFrame + "_Output.json");
-        jsonReader = new JsonReader(fileReader);
-        List<BotCandle> data = gson.fromJson(jsonReader, BOTCANDLE_TYPE);
-        Collections.sort(data, new BotCandleTimeComparator());
-        marketData.put(pair, data);
-      } finally {
-        try {
-          fileReader.close();
-          jsonReader.close();
-        } catch (IOException e) {
-          e.printStackTrace();
-        }
-      }
-      //System.out.println(pair + " " + marketData.get(pair).size());
-    }
-
-    for (int i = 0; i < marketData.get(PAIRS_ARR[0]).size(); i++) {
-      for (String pair : PAIRS_ARR) {
-        final BotCandle candle = marketData.get(pair).get(i);
-        final BotStrategy botStrategyData = pairs.get(pair);
-        botStrategyData.addCandle(candle);
-        indicatorSMA.calculateMovingAverage(candle).ifPresent(sma -> {
-          botStrategyData.setPreviousSMAValue(botStrategyData.getCurrentSMAValue());
-          botStrategyData.setCurrentSMAValue(sma);
-        });
-        indicatorATR.calculateATR(candle).ifPresent(atr -> botStrategyData.setCurrentATRValue(atr));
-        indicatorADX.calculate(candle).ifPresent(adx -> botStrategyData.setCurrentADXValue(adx));
-        if (i >= maPeriods20) {
-          System.out.println(candle.getTime() + " " + "BotStrategy : " + pair + " moving average : " + botStrategyData.getCurrentSMAValue() + " closing price " + candle.getClose());
-        }
-        findTradeOpportunity(pair, botStrategyData, candle.getTime()));
-      }
-    }*/
   }
-
-  /*private void updateIndicator(String pair, BotCandle botCandle) {
-    final BotStrategy botStrategyData = pairs.get(pair);
-    botStrategyData.addCandle(botCandle);
-    indicatorSMA.calculate(botCandle).ifPresent(sma -> {
-      botStrategyData.setPreviousSMAValue(botStrategyData.getCurrentSMAValue());
-      botStrategyData.setCurrentSMAValue(sma);
-    });
-    indicatorATR.calculate(botCandle).ifPresent(atr -> botStrategyData.setCurrentATRValue(atr));
-    indicatorADX.calculate(botCandle).ifPresent(adx -> botStrategyData.setCurrentADXValue(adx));
-//              if (i >= maPeriods20) {
-    System.out.println(botCandle.getTime() + " " + "BotStrategy : " + pair + " moving average : " + botStrategyData.getCurrentSMAValue() + " closing price " + botCandle.getClose());
-//              }
-    findTradeOpportunity(pair, botStrategyData, botCandle.getTime());
-  }*/
 
   /**
    * Data analyser
+   *
    * @param pair
    * @param botStrategyData
    * @param time
    */
-  private void findTradeOpportunity(String pair, BotStrategy botStrategyData, long time) {
+  private void findTradeOpportunity(String pair, TradingStrategy botStrategyData, long time) {
     if (!botStrategyData.isOpenLong() && !botStrategyData.isOpenShort()) {
-      if (botStrategyData.getPreviousClose() < botStrategyData.getPreviousSMAValue() &&
-              botStrategyData.getCurrentClose() > botStrategyData.getCurrentSMAValue() &&
-              botStrategyData.getCurrentADXValue() > trendStrength) {
+      if (botStrategyData.openLong()) {
         openLongPosition(pair, botStrategyData, time);
-      } else if (botStrategyData.getPreviousClose() > botStrategyData.getPreviousSMAValue() &&
-              botStrategyData.getCurrentClose() < botStrategyData.getCurrentSMAValue()) {
+      } else if (botStrategyData.openShort()) {
         openShortPosition(pair, botStrategyData, time);
       }
     } else if (botStrategyData.isOpenLong()) {
-      if (botStrategyData.getCurrentClose() < botStrategyData.getCurrentSMAValue() &&
-        botStrategyData.getCurrentClose() > botStrategyData.getEntryPrice() * 1.004) {
+      if (botStrategyData.closeLong()) {
         success++;
         botStrategyData.setSuccesses(botStrategyData.getSuccesses() + 1);
         closeLongPosition(pair, botStrategyData.getCurrentClose(), time);
-      } else if (botStrategyData.getCurrentClose() < botStrategyData.getStopLossPrice()) {
+      } else if (botStrategyData.longStopLoss()) {
         loss++;
         botStrategyData.setLosses(botStrategyData.getLosses() + 1);
         closeLongPosition(pair, botStrategyData.getStopLossPrice(), time);
       }
     } else if (botStrategyData.isOpenShort()) {
-      if (botStrategyData.getCurrentClose() > botStrategyData.getCurrentSMAValue() &&
-        botStrategyData.getCurrentClose() < botStrategyData.getEntryPrice() * 0.996) {
+      if (botStrategyData.closeShort()) {
         success++;
         botStrategyData.setSuccesses(botStrategyData.getSuccesses() + 1);
         closeShortPosition(pair, botStrategyData.getCurrentClose(), time);
-      } else if (botStrategyData.getCurrentClose() > botStrategyData.getStopLossPrice()) {
+      } else if (botStrategyData.shortStopLoss()) {
         loss++;
         botStrategyData.setLosses(botStrategyData.getLosses() + 1);
         closeShortPosition(pair, botStrategyData.getStopLossPrice(), time);
@@ -261,7 +193,7 @@ public class Manager {
     }
   }
 
-  private void openShortPosition(String pair, BotStrategy botStrategyData, long time) {
+  private void openShortPosition(String pair, TradingStrategy botStrategyData, long time) {
     botStrategyData.setStopLossPrice(botStrategyData.getCurrentClose() + botStrategyData.getCurrentATRValue() * 2);
     botStrategyData.setEntryAmount(getPositionSize(botStrategyData.getCurrentClose(), pair));
     try {
@@ -282,7 +214,7 @@ public class Manager {
     }
   }
 
-  private void openLongPosition(String pair, BotStrategy botStrategyData, long time) {
+  private void openLongPosition(String pair, TradingStrategy botStrategyData, long time) {
     botStrategyData.setStopLossPrice(botStrategyData.getCurrentClose() - botStrategyData.getCurrentATRValue() * 2);
     botStrategyData.setEntryAmount(getPositionSize(botStrategyData.getCurrentClose(), pair));
     try {
@@ -305,7 +237,7 @@ public class Manager {
 
   // Risk adjusted position sizing
   private double getPositionSize(double price, String pair) {
-    final BotStrategy botStrategyData = pairs.get(pair);
+    final TradingStrategy botStrategyData = pairs.get(pair);
 
     if (botStrategyData.getProfits().size() >= 50) {
       double winning = botStrategyData.getSuccesses() / (botStrategyData.getSuccesses() + botStrategyData.getLosses());

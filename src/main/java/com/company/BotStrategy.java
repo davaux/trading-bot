@@ -9,7 +9,7 @@ import org.apache.commons.collections4.queue.CircularFifoQueue;
 import java.util.ArrayList;
 import java.util.List;
 
-public class BotStrategy {
+public class BotStrategy implements TradingStrategy {
   private final CircularFifoQueue<BotCandle> candlesQueue;
   private boolean openLong = false;
   private boolean openShort = false;
@@ -28,6 +28,7 @@ public class BotStrategy {
   private IndicatorATR indicatorATR;
   private IndicatorSMA indicatorSMA;
   private IndicatorADX indicatorADX;
+  private double trendStrength = 25;
 
   public double getKelly() {
     return kelly;
@@ -113,6 +114,12 @@ public class BotStrategy {
     return getCurrentClose();
   }
 
+  public boolean openLong() {
+    return getPreviousClose() < getPreviousSMAValue() &&
+            getCurrentClose() > getCurrentSMAValue() &&
+            getCurrentADXValue() > trendStrength;
+  }
+
   public boolean isOpenLong() {
     return openLong;
   }
@@ -189,5 +196,28 @@ public class BotStrategy {
     indicatorADX.init(botCandles);
     indicatorATR.init(botCandles);
     indicatorSMA.init(botCandles);
+  }
+
+  public boolean openShort() {
+    return getPreviousClose() > getPreviousSMAValue() &&
+            getCurrentClose() < getCurrentSMAValue();
+  }
+
+  public boolean closeLong() {
+    return getCurrentClose() < getCurrentSMAValue() &&
+            getCurrentClose() > getEntryPrice() * 1.004;
+  }
+
+  public boolean longStopLoss() {
+    return getCurrentClose() < getStopLossPrice();
+  }
+
+  public boolean closeShort() {
+    return getCurrentClose() > getCurrentSMAValue() &&
+            getCurrentClose() < getEntryPrice() * 0.996;
+  }
+
+  public boolean shortStopLoss() {
+    return getCurrentClose() > getStopLossPrice();
   }
 }
