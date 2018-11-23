@@ -114,12 +114,6 @@ public class BotStrategy implements TradingStrategy {
     return getCurrentClose();
   }
 
-  public boolean openLong() {
-    return getPreviousClose() < getPreviousSMAValue() &&
-            getCurrentClose() > getCurrentSMAValue() &&
-            getCurrentADXValue() > trendStrength;
-  }
-
   public boolean isOpenLong() {
     return openLong;
   }
@@ -198,26 +192,32 @@ public class BotStrategy implements TradingStrategy {
     indicatorSMA.init(botCandles);
   }
 
+  public boolean openLong() {
+    return getPreviousClose() < getPreviousSMAValue() &&
+            getCurrentClose() > getCurrentSMAValue() &&
+            getCurrentADXValue() > trendStrength;
+  }
+
   public boolean openShort() {
     return getPreviousClose() > getPreviousSMAValue() &&
             getCurrentClose() < getCurrentSMAValue();
   }
 
-  public boolean closeLong() {
+  public boolean shouldCloseLong() {
     return getCurrentClose() < getCurrentSMAValue() &&
             getCurrentClose() > getEntryPrice() * 1.004;
   }
 
-  public boolean longStopLoss() {
+  public boolean shouldStopLossLong() {
     return getCurrentClose() < getStopLossPrice();
   }
 
-  public boolean closeShort() {
+  public boolean shouldCloseShort() {
     return getCurrentClose() > getCurrentSMAValue() &&
             getCurrentClose() < getEntryPrice() * 0.996;
   }
 
-  public boolean shortStopLoss() {
+  public boolean shouldStopLossShort() {
     return getCurrentClose() > getStopLossPrice();
   }
 }

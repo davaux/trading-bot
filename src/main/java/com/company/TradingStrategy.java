@@ -16,11 +16,11 @@ public interface TradingStrategy {
 
   void setSuccesses(int i);
 
-  boolean closeLong();
+  boolean shouldCloseLong();
 
   double getCurrentClose();
 
-  boolean longStopLoss();
+  boolean shouldStopLossLong();
 
   double getStopLossPrice();
 
@@ -28,9 +28,9 @@ public interface TradingStrategy {
 
   void setLosses(int i);
 
-  boolean closeShort();
+  boolean shouldCloseShort();
 
-  boolean shortStopLoss();
+  boolean shouldStopLossShort();
 
   double getCurrentATRValue();
 

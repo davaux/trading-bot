@@ -28,9 +28,10 @@ import java.util.stream.Collectors;
 public class BotTrade {
   private double initAmount = 0.02;
   private Map<String, Double> reserved = new HashMap<>();
+  private final String timeFrame;
 
-  public BotTrade() {
-
+  public BotTrade(String timeFrame) {
+    this.timeFrame = timeFrame;
   }
 
   public void getTicker(String pair, GetRequestCallback callback) {
@@ -88,7 +89,6 @@ public class BotTrade {
     long now = System.currentTimeMillis();
     System.out.println("Current time " + now);
     int limit = 1000;
-    String timeFrame = "15m";
     int timeFrameLengthInSec = 900;
     // time frame length in seconds 15m -> 900
     long startDate = /*1483228800 => 2017/01/01*/(timeFrameLengthInSec - (now / 1000) % timeFrameLengthInSec + (now / 1000) - (limit + 1) * timeFrameLengthInSec) * 1000;

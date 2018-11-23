@@ -15,14 +15,14 @@ import java.util.concurrent.TimeUnit;
 public class Manager {
 
   public static final String[] PAIRS_ARR = {
-          "IOTABTC", "XRPBTC"/*, "BTCUSD"*/, "LTCBTC", "ETHBTC",
-          "NEOBTC", "EOSBTC", "XLMBTC", "TRXBTC", "QTUMBTC",
-          "XTZBTC", "XVGBTC", "VETBTC"};
+          /*"IOTBTC", */"XRPBTC"/*, "BTCUSD", "LTCBTC", "ETHBTC",
+          "NEOBTC", "EOSBTC", "XLMBTC", "TRXBTC", "QTMBTC",
+          "XTZBTC", "XVGBTC", "VETBTC"*/};
   private Map<String, TradingStrategy> pairs;
-  public static final int maPeriods20 = 20;
+  public static final int maPeriods20 = 21;
   public static final int adxPeriods14 = 14;
   public static final int atrPeriods14 = 14;
-  private BotTrade botTrade = new BotTrade();
+  private BotTrade botTrade = new BotTrade("15m");
   private int openedPositions = 0;
   private int success = 0;
   private int loss = 0;
@@ -53,9 +53,9 @@ public class Manager {
             botCandles.add(botCandle);
           }
           System.out.println(pair + " " + resppair + " " + botCandles.size());
-          final TradingStrategy value = new BotStrategy(maPeriods20, atrPeriods14, adxPeriods14);
-          value.initIndicator(botCandles);
-          pairs.put(resppair, value);
+          final TradingStrategy botStrategy = new BotStrategy(maPeriods20, atrPeriods14, adxPeriods14);
+          botStrategy.initIndicator(botCandles);
+          pairs.put(resppair, botStrategy);
         }
       });
       try {
@@ -119,21 +119,21 @@ public class Manager {
         openShortPosition(pair, botStrategyData, time);
       }
     } else if (botStrategyData.isOpenLong()) {
-      if (botStrategyData.closeLong()) {
+      if (botStrategyData.shouldCloseLong()) {
         success++;
         botStrategyData.setSuccesses(botStrategyData.getSuccesses() + 1);
         closeLongPosition(pair, botStrategyData.getCurrentClose(), time);
-      } else if (botStrategyData.longStopLoss()) {
+      } else if (botStrategyData.shouldStopLossLong()) {
         loss++;
         botStrategyData.setLosses(botStrategyData.getLosses() + 1);
         closeLongPosition(pair, botStrategyData.getStopLossPrice(), time);
       }
     } else if (botStrategyData.isOpenShort()) {
-      if (botStrategyData.closeShort()) {
+      if (botStrategyData.shouldCloseShort()) {
         success++;
         botStrategyData.setSuccesses(botStrategyData.getSuccesses() + 1);
         closeShortPosition(pair, botStrategyData.getCurrentClose(), time);
-      } else if (botStrategyData.shortStopLoss()) {
+      } else if (botStrategyData.shouldStopLossShort()) {
         loss++;
         botStrategyData.setLosses(botStrategyData.getLosses() + 1);
         closeShortPosition(pair, botStrategyData.getStopLossPrice(), time);

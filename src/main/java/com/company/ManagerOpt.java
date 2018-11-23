@@ -86,12 +86,13 @@ public class ManagerOpt {
         openedPositions = 0;
         success = 0;
         loss = 0;
-        botTrade = new BotTrade();
+        botTrade = new BotTrade("15m");
         System.out.println("Starting backtesting");
         System.out.println("-----------------------------------------------------------------------------------");
         for (int i = 0; i < marketData.get(PAIRS_ARR[0]).size(); i++) {
           for (String pair : PAIRS_ARR) {
-            updateIndicators(pair, marketData.get(pair).get(i));
+            pairs.get(pair).updateIndicator(pair, marketData.get(pair).get(i));
+            findTradeOpportunity(pair, pairs.get(pair), marketData.get(pair).get(i).getTime());
           }
         }
 

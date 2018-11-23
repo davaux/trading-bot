@@ -31,25 +31,24 @@ public class Main {
 
     public static void main(String[] args) throws URISyntaxException, IOException, InterruptedException {
         //getFromCryptoCompare();
-        //getFromBitfinex();
-        new Manager().runBot();
-
+//        getFromBitfinex();
+        //new Manager().runBot();
 //        new ManagerOpt().runBot();
+        new ManagerAdv().init().runBot();
     }
 
     private static void getFromBitfinex() throws URISyntaxException, IOException, InterruptedException {
         //LocalDateTime date = LocalDateTime.now().minusDays(7);
         //Timestamp t = Timestamp.valueOf(date);
         long startDate = 1483228800 * 1000;
-        String pair = "BTCUSD";
-        String timeFrame = "1h";
+        String pair = "XLMBTC";
+        String timeFrame = "15m";
 
         Gson gson = new GsonBuilder()
                 .registerTypeAdapter(BotCandle.class, new BotCandleDeserializer())
                 .create();
         Set<BotCandle> olhcData = new HashSet<>();
         DateFormat df = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
-
 
         for(int i = 0; i < 100; i++) {
             System.out.println("Start date " + startDate);
@@ -90,11 +89,14 @@ public class Main {
             }
 
             Collection<BotCandle> botCandles = new ArrayList<>();
+            if (execute.length() == 0) {
+                break;
+            }
             for(int x = 0; x < execute.length(); x++) {
                 BotCandle e = gson.fromJson(execute.get(x).toString(), BotCandle.class);
                 botCandles.add(e);
                 if(x == execute.length() - 1) {
-                    startDate = e.getTime() + 60 * 60 * 1000;
+                    startDate = e.getTime() + 15 * 15 * 1000;
                 }
             }
             olhcData.addAll(botCandles);
