@@ -8,7 +8,7 @@ public class BfxTrade {
   private double makerFeesPct = 0.2;
   private Map<String, Double> reserve = new HashMap<>();
 
-  public void tesTrade(String pair, double price, double amount, String type, String action, Runnable callback) {
+  public void testTrade(String pair, double price, double amount, String type, String action, Runnable callback) {
     switch (type) {
       case "buy":
         if ("long".equals(action)) {

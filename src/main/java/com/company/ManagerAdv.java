@@ -10,11 +10,7 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Message Broker
@@ -39,7 +35,7 @@ public class ManagerAdv {
           "XTZBTC"*/, "XLMBTC", "XVGBTC", "VETBTC"};
 
   private Map<String, StategyData> pairs;
-  private BfxTrade bfxTrade;
+  private com.company.BfxTrade bfxTrade;
   private int openedPositions;
   private int successes;
   private int losses;
@@ -64,7 +60,7 @@ public class ManagerAdv {
   public void runBot() {
     final Map<String, List<BotCandle>> marketData = initMarketData();
 
-    for (int i = 0; i < /*marketData.get(PAIRS_ARR[0]).size()*/50; i++) {
+    for (int i = 0; i < marketData.get(PAIRS_ARR[0]).size(); i++) {
       for (String pair : PAIRS_ARR) {
         if (i < marketData.get(pair).size())
           updateIndicators(pair, marketData.get(pair).get(i));
@@ -72,8 +68,10 @@ public class ManagerAdv {
     }
   }
 
-  private void updateIndicators(String pair, BotCandle candle) {
-    pairs.get(pair).indicatorAdxAdv.nextValue(candle.getClose(), candle.getHigh(), candle.getLow());
+  private void updateIndicators(String pair, com.company.BotCandle candle) {
+    pairs.get(pair).indicatorAdxAdv.nextValue(candle.getClose(), candle.getHigh(), candle.getLow()).ifPresent(adxValue -> {
+      pairs.get(pair).setAdxValue(adxValue);
+    });
     pairs.get(pair).indicatorSMAAdv.nextValue(candle.getClose(), 0).ifPresent(maValue -> {
       pairs.get(pair).setMaValue(maValue);
       findTradeOpportunity(pair, candle.getClose());
@@ -90,6 +88,7 @@ public class ManagerAdv {
    */
   private void findTradeOpportunity(String pair, double close) {
     if (!pairs.get(pair).isOpenLong() && !pairs.get(pair).isOpenShort()) {
+//      System.out.println(pair + " " + " ADX " + pairs.get(pair).getAdxValue());
       if (pairs.get(pair).getPreviousPrice() < pairs.get(pair).getPreviousMaValue()
               && close > pairs.get(pair).getMaValue()
               && pairs.get(pair).getAdxValue() > trendStrength) {
@@ -126,7 +125,7 @@ public class ManagerAdv {
   private void openLongPosition(String pair, double price) {
     pairs.get(pair).setStopLossPrice(price * 0.98);
     pairs.get(pair).setEntryAmount(getPositionSize(price));
-    bfxTrade.tesTrade(pair, price, pairs.get(pair).getEntryAmount(), "buy", "long", new Runnable() {
+    bfxTrade.testTrade(pair, price, pairs.get(pair).getEntryAmount(), "buy", "long", new Runnable() {
       @Override
       public void run() {
         pairs.get(pair).setOpenLong(true);
@@ -143,7 +142,7 @@ public class ManagerAdv {
   private void openShortPosition(String pair, double price) {
     pairs.get(pair).setStopLossPrice(price * 1.02);
     pairs.get(pair).setEntryAmount(getPositionSize(price));
-    bfxTrade.tesTrade(pair, price, pairs.get(pair).getEntryAmount(), "sell", "short", new Runnable() {
+    bfxTrade.testTrade(pair, price, pairs.get(pair).getEntryAmount(), "sell", "short", new Runnable() {
       @Override
       public void run() {
         pairs.get(pair).setOpenShort(true);
@@ -158,7 +157,7 @@ public class ManagerAdv {
   }
 
   private void closeLongPosition(String pair, double price) {
-    bfxTrade.tesTrade(pair, price, pairs.get(pair).getEntryAmount(), "sell", "long", new Runnable() {
+    bfxTrade.testTrade(pair, price, pairs.get(pair).getEntryAmount(), "sell", "long", new Runnable() {
       @Override
       public void run() {
         System.out.println(pair + " Closed long position at " + price + " amount " + pairs.get(pair).getEntryAmount());
@@ -175,7 +174,7 @@ public class ManagerAdv {
   }
 
   private void closeShortPosition(String pair, double price) {
-    bfxTrade.tesTrade(pair, price, pairs.get(pair).getEntryAmount(), "buy", "short", new Runnable() {
+    bfxTrade.testTrade(pair, price, pairs.get(pair).getEntryAmount(), "buy", "short", new Runnable() {
       @Override
       public void run() {
         System.out.println(pair + " Closed short position at " + price + " amount " + pairs.get(pair).getEntryAmount());
