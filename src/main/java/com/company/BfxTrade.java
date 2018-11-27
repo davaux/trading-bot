@@ -12,17 +12,17 @@ public class BfxTrade {
     switch (type) {
       case "buy":
         if ("long".equals(action)) {
-          this.initAmount -= (1 + makerFeesPct / 100) * price * amount;
+          this.initAmount -= (1 + makerFeesPct / 100.0) * price * amount;
         } else {
-          this.initAmount += (1 - makerFeesPct / 100) * (2 * this.reserve.get(pair) - (price * amount));
+          this.initAmount += (1 - makerFeesPct / 100.0) * (2 * this.reserve.get(pair) - (price * amount));
         }
         break;
       case "sell":
         if ("long".equals(action)) {
-          this.initAmount += (1 - makerFeesPct / 100) * price * amount;
+          this.initAmount += (1 - makerFeesPct / 100.0) * price * amount;
         } else {
           this.reserve.put(pair, price * amount);
-          this.initAmount -= (1 + makerFeesPct / 100) * this.reserve.get(pair);
+          this.initAmount -= (1 + makerFeesPct / 100.0) * this.reserve.get(pair);
         }
         break;
     }

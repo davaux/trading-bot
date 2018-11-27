@@ -34,15 +34,17 @@ public class Main {
 //        getFromBitfinex();
         //new Manager().runBot();
 //        new ManagerOpt().runBot();
-        new ManagerAdv().init().runBot();
+//        new ManagerSmaAdxStrat().init().runBot();
+      new ManagerSRStrat().init().runBot();
     }
 
     private static void getFromBitfinex() throws URISyntaxException, IOException, InterruptedException {
         //LocalDateTime date = LocalDateTime.now().minusDays(7);
         //Timestamp t = Timestamp.valueOf(date);
         long startDate = 1483228800 * 1000;
-        String pair = "XLMBTC";
-        String timeFrame = "15m";
+        String pair = "ETHBTC";
+//        String timeFrame = "15m";
+      String timeFrame = "15m";
 
         Gson gson = new GsonBuilder()
                 .registerTypeAdapter(BotCandle.class, new BotCandleDeserializer())
