@@ -3,15 +3,22 @@ package com.company;
 import com.company.indicators.IndicatorATRAdv;
 import com.company.indicators.IndicatorPPAdv;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
+import javafx.util.Pair;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Writer;
 import java.lang.reflect.Type;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,11 +41,13 @@ import java.util.Map;
  */
 public class ManagerSRStratOpt {
   public static final String[] PAIRS_ARR = {
-          /*"IOTBTC", "XRPBTC", "BTCUSD", "LTCBTC", */"ETHBTC"/*,
+          /*"IOTBTC", "XRPBTC", "BTCUSD", "LTCBTC", "ETHBTC",
           "NEOBTC", "EOSBTC", "TRXBTC", "QTMBTC",
-          "XTZBTC", "XLMBTC", "XVGBTC", "VETBTC"*/};
+          "XTZBTC", "XLMBTC", "XVGBTC", */"VETBTC"};
 
   private Map<String, StategyData> pairs;
+  private Map<String, List<ChartData>> chartDataMap;
+  private Map<String, Map<Long, ChartData>> chartDataRegistry;
   private BfxTrade bfxTrade;
   private int openedPositions;
   private int successes;
@@ -50,6 +59,8 @@ public class ManagerSRStratOpt {
   public ManagerSRStratOpt() {
     pairs = new HashMap<>();
     bfxTrade = new BfxTrade();
+    chartDataMap = new HashMap<>();
+    chartDataRegistry = new HashMap<>();
   }
 
   public ManagerSRStratOpt init() {
@@ -58,20 +69,53 @@ public class ManagerSRStratOpt {
       stategyData.setIndicatorPPAdv(new IndicatorPPAdv(new ArrayList<>(), new ArrayList<>(), new ArrayList<>()));
       stategyData.setIndicatorATRAdv(new IndicatorATRAdv(atrPeriod, new ArrayList<>(), new ArrayList<>(), new ArrayList<>()));
       pairs.put(pair, stategyData);
+      chartDataMap.put(pair, new ArrayList<>());
+      chartDataRegistry.put(pair, new HashMap<>());
     }
     return this;
   }
 
   public void runBot() {
-    final Map<String, List<BotCandle>> marketData = initMarketData("15m");
+    final String timeFrame = "15m";
+    final Map<String, List<BotCandle>> marketData = initMarketData(timeFrame);
     System.out.println("market data 15m size " + marketData.get(PAIRS_ARR[0]).size() + " converted in days " + marketData.get(PAIRS_ARR[0]).size() / 96);
 
-    int index1D = 0;
     for (int i = 0; i < marketData.get(PAIRS_ARR[0]).size(); i++) {
       for (String pair : PAIRS_ARR) {
-        if (i < marketData.get(pair).size())
-          updateIndicators(pair, marketData.get(pair).get(i));
+        if (i < marketData.get(pair).size()) {
+          final BotCandle candle = marketData.get(pair).get(i);
+          if (i == 96) {
+            pairs.get(pair).setStartTradeTime(candle.getTime());
+          }
+          final ChartData chartData = new ChartData();
+          Date date = new Date();
+          date.setTime(candle.getTime());
+          chartData.setDate(new SimpleDateFormat("YYYY-MM-dd HH:mm:ss").format(date));
+          chartData.setPrice(candle.getClose());
+          chartDataRegistry.get(pair).put(candle.getTime(), chartData);
+          updateIndicators(pair, candle);
+          chartDataRegistry.get(pair).get(candle.getTime()).setPpValue(pairs.get(pair).getPpValue());
+          chartDataRegistry.get(pair).get(candle.getTime()).setResistance1(pairs.get(pair).getR1Value());
+          chartDataRegistry.get(pair).get(candle.getTime()).setSupport1(pairs.get(pair).getS1Value());
+          chartDataRegistry.get(pair).get(candle.getTime()).setResistance2(pairs.get(pair).getR2Value());
+          chartDataRegistry.get(pair).get(candle.getTime()).setSupport2(pairs.get(pair).getS2Value());
+          chartDataRegistry.get(pair).get(candle.getTime()).setResistance3(pairs.get(pair).getR3Value());
+          chartDataRegistry.get(pair).get(candle.getTime()).setSupport3(pairs.get(pair).getS3Value());
+          chartDataRegistry.get(pair).get(candle.getTime()).setAtrValue(pairs.get(pair).getAtrValue());
+          chartDataMap.get(pair).add(chartData);
+        }
       }
+    }
+
+//    Gson gson = new GsonBuilder().create();
+//    String json = gson.toJson(chartDataMap);
+//    System.out.println(json);
+
+    try (Writer writer = new FileWriter("BFX_Full_chart_data_" + timeFrame + "_Output.json")) {
+      Gson gson = new GsonBuilder().create();
+      gson.toJson(chartDataMap, writer);
+    } catch (IOException e) {
+      e.printStackTrace();
     }
   }
 
@@ -88,7 +132,7 @@ public class ManagerSRStratOpt {
       pairs.get(pair).setR3Value(pairs.get(pair).indicatorPPAdv.getResistance3());
       pairs.get(pair).setS3Value(pairs.get(pair).indicatorPPAdv.getSupport3());
 //      System.out.println("pivot point " + pairs.get(pair).getPpValue() + " R1 point " + pairs.get(pair).getR1Value() + " S1 point " + pairs.get(pair).getS1Value() + " ATR " + pairs.get(pair).getAtrValue());
-      findTradeOpportunity(pair, candle.getClose());
+      findTradeOpportunity(pair, candle.getClose(), candle.getTime());
       pairs.get(pair).setPreviousPrice(candle.getClose());
     });
   }
@@ -98,26 +142,33 @@ public class ManagerSRStratOpt {
    *
    * @param pair
    * @param close
+   * @param time
    */
-  private void findTradeOpportunity(String pair, double close) {
+  private void findTradeOpportunity(String pair, double close, long time) {
+    final double val = Math.abs(pairs.get(pair).getS1Value() - pairs.get(pair).getPpValue()) / 3.0;
     if (!pairs.get(pair).isOpenLong() && !pairs.get(pair).isOpenShort()) {
-      if (close <= pairs.get(pair).getS1Value() * (1 + pairs.get(pair).getAtrValue()/100.0)
-              && close >= pairs.get(pair).getS1Value() * (1 - pairs.get(pair).getAtrValue()/100.0)) {
+      if (close <= pairs.get(pair).getS1Value() + val
+              && close >= pairs.get(pair).getS1Value() - val) {
+        chartDataRegistry.get(pair).get(time).setEntryPriceLong(close);
         openLongPosition(pair, close);
-      } else if (close >= pairs.get(pair).getR1Value() * (1 - pairs.get(pair).getAtrValue()/100.0) && close <= pairs.get(pair).getR1Value() * (1 + pairs.get(pair).getAtrValue()/100.0)) {
+      } else if (close >= pairs.get(pair).getR1Value() - val && close <= pairs.get(pair).getR1Value() + val) {
+        chartDataRegistry.get(pair).get(time).setEntryPriceShort(close);
         openShortPosition(pair, close);
       }
     } else if (pairs.get(pair).isOpenLong()) {
-      if (close >= pairs.get(pair).getCurrentTradePPValue()
+      if ((close >= pairs.get(pair).getCurrentTradePPValue()
+              || close > (pairs.get(pair).getCurrentTradePPValue() - val))
               && close > pairs.get(pair).getEntryPrice() * (1 + exchangeFees / 100.0)) {
         successes++;
         pairs.get(pair).setSuccesses(pairs.get(pair).getSuccesses() + 1);
+        chartDataRegistry.get(pair).get(time).setExitPriceLong(close);
         closeLongPosition(pair, close);
       }
       // check stop loss
       else if (close < pairs.get(pair).getStopLossPrice()) {
         losses++;
         pairs.get(pair).setLosses(pairs.get(pair).getLosses() + 1);
+        chartDataRegistry.get(pair).get(time).setExitPriceLong(pairs.get(pair).getStopLossPrice());
         closeLongPosition(pair, pairs.get(pair).getStopLossPrice());
       }
     } else if (pairs.get(pair).isOpenShort()) {
@@ -125,19 +176,22 @@ public class ManagerSRStratOpt {
               && close < pairs.get(pair).getEntryPrice() * (1 - exchangeFees / 100.0)) {
         successes++;
         pairs.get(pair).setSuccesses(pairs.get(pair).getSuccesses() + 1);
+        chartDataRegistry.get(pair).get(time).setExitPriceShort(close);
         closeShortPosition(pair, close);
       }
       // check stop loss
       else if (close > pairs.get(pair).getStopLossPrice()) {
         losses++;
         pairs.get(pair).setLosses(pairs.get(pair).getLosses() + 1);
+        chartDataRegistry.get(pair).get(time).setExitPriceShort(pairs.get(pair).getStopLossPrice());
         closeShortPosition(pair, pairs.get(pair).getStopLossPrice());
       }
     }
   }
 
   private void openLongPosition(String pair, double price) {
-    pairs.get(pair).setStopLossPrice(pairs.get(pair).getS2Value() * (1 -  pairs.get(pair).getAtrValue()/100.0));
+    final double val = Math.abs(pairs.get(pair).getS2Value() - pairs.get(pair).getS1Value()) / 3.0;
+    pairs.get(pair).setStopLossPrice(pairs.get(pair).getS1Value() - val);
     pairs.get(pair).setEntryAmount(getPositionSize(pair, price));
     pairs.get(pair).setCurrentTradePPValue(pairs.get(pair).getPpValue());
     bfxTrade.testTrade(pair, price, pairs.get(pair).getEntryAmount(), "buy", "long", new Runnable() {
@@ -157,7 +211,8 @@ public class ManagerSRStratOpt {
   }
 
   private void openShortPosition(String pair, double price) {
-    pairs.get(pair).setStopLossPrice(pairs.get(pair).getR2Value() * (1 + pairs.get(pair).getAtrValue()/100.0));
+    final double val = Math.abs(pairs.get(pair).getR2Value() - pairs.get(pair).getR1Value()) / 3.0;
+    pairs.get(pair).setStopLossPrice(pairs.get(pair).getR1Value() + val);
     pairs.get(pair).setEntryAmount(getPositionSize(pair, price));
     pairs.get(pair).setCurrentTradePPValue(pairs.get(pair).getPpValue());
     bfxTrade.testTrade(pair, price, pairs.get(pair).getEntryAmount(), "sell", "short", new Runnable() {
@@ -229,6 +284,7 @@ public class ManagerSRStratOpt {
    * Position manager
    * - Risk adjusted sizing
    * - Kelly Criterion sizing
+   *
    * @param price
    * @return
    */
@@ -319,6 +375,135 @@ public class ManagerSRStratOpt {
     return marketData;
   }
 
+  private class ChartData {
+    private double price;
+    private String date;
+    private double entryPriceLong;
+    private double entryPriceShort;
+    private double exitPriceLong;
+    private double exitPriceShort;
+    private double ppValue;
+    private double resistance1;
+    private double resistance2;
+    private double resistance3;
+    private double support1;
+    private double support2;
+    private double support3;
+    private double atrValue;
+
+    public double getAtrValue() {
+      return atrValue;
+    }
+
+    public void setAtrValue(double atrValue) {
+      this.atrValue = atrValue;
+    }
+
+    public double getPrice() {
+      return price;
+    }
+
+    public void setPrice(double price) {
+      this.price = price;
+    }
+
+    public String getDate() {
+      return date;
+    }
+
+    public void setDate(String date) {
+      this.date = date;
+    }
+
+    public double getPpValue() {
+      return ppValue;
+    }
+
+    public void setPpValue(double ppValue) {
+      this.ppValue = ppValue;
+    }
+
+    public double getResistance1() {
+      return resistance1;
+    }
+
+    public void setResistance1(double resistance1) {
+      this.resistance1 = resistance1;
+    }
+
+    public double getResistance2() {
+      return resistance2;
+    }
+
+    public void setResistance2(double resistance2) {
+      this.resistance2 = resistance2;
+    }
+
+    public double getResistance3() {
+      return resistance3;
+    }
+
+    public void setResistance3(double resistance3) {
+      this.resistance3 = resistance3;
+    }
+
+    public double getSupport1() {
+      return support1;
+    }
+
+    public void setSupport1(double support1) {
+      this.support1 = support1;
+    }
+
+    public double getSupport2() {
+      return support2;
+    }
+
+    public void setSupport2(double support2) {
+      this.support2 = support2;
+    }
+
+    public double getSupport3() {
+      return support3;
+    }
+
+    public void setSupport3(double support3) {
+      this.support3 = support3;
+    }
+
+    public double getEntryPriceLong() {
+      return entryPriceLong;
+    }
+
+    public void setEntryPriceLong(double entryPriceLong) {
+      this.entryPriceLong = entryPriceLong;
+    }
+
+    public double getEntryPriceShort() {
+      return entryPriceShort;
+    }
+
+    public void setEntryPriceShort(double entryPriceShort) {
+      this.entryPriceShort = entryPriceShort;
+    }
+
+    public double getExitPriceLong() {
+      return exitPriceLong;
+    }
+
+    public void setExitPriceLong(double exitPriceLong) {
+      this.exitPriceLong = exitPriceLong;
+    }
+
+    public double getExitPriceShort() {
+      return exitPriceShort;
+    }
+
+    public void setExitPriceShort(double exitPriceShort) {
+      this.exitPriceShort = exitPriceShort;
+    }
+  }
+
   private class StategyData {
     private IndicatorPPAdv indicatorPPAdv;
     private IndicatorATRAdv indicatorATRAdv;
@@ -344,6 +529,15 @@ public class ManagerSRStratOpt {
     private List<Double> profitsInPct = new ArrayList<>();
     private double kelly = 0.25;
     private double currentTradePPValue;
+    private long startTradeTime;
+
+    public void setStartTradeTime(long startTradeTime) {
+      this.startTradeTime = startTradeTime;
+    }
+
+    public long getStartTradeTime() {
+      return startTradeTime;
+    }
 
     public void setCurrentTradePPValue(double currentTradePPValue) {
       this.currentTradePPValue = currentTradePPValue;
