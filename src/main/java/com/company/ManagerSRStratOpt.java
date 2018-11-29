@@ -43,7 +43,7 @@ public class ManagerSRStratOpt {
   public static final String[] PAIRS_ARR = {
           /*"IOTBTC", "XRPBTC", "BTCUSD", "LTCBTC", "ETHBTC",
           "NEOBTC", "EOSBTC", "TRXBTC", "QTMBTC",
-          "XTZBTC", "XLMBTC", "XVGBTC", */"VETBTC"};
+          "XTZBTC", */"XLMBTC"/*, "XVGBTC", "VETBTC"*/};
 
   private Map<String, StategyData> pairs;
   private Map<String, List<ChartData>> chartDataMap;
@@ -139,6 +139,7 @@ public class ManagerSRStratOpt {
 
   /**
    * Data analyzer
+   * Pivot point bounce strategy
    *
    * @param pair
    * @param close
