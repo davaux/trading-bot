@@ -21,22 +21,27 @@ public class IndicatorATRAdv {
   }
 
   public Optional<Double> nextValue(double close, double high, double low) {
+
+    if (closes.isEmpty()) {
+      trueRanges.add(high - low);
+    } else {
+      final Double previousClose = closes.get(closes.size() - 1);
+      final double trueRange = Math.max(high - low, Math.max(Math.abs(high - previousClose), Math.abs(low - previousClose)));
+      trueRanges.add(trueRange);
+    }
+
     this.closes.add(close);
     this.highs.add(high);
     this.lows.add(low);
+
     if (this.closes.size() < period || this.highs.size() < period || this.lows.size() < period) {
       return Optional.empty();
     }
-
-    final Double previousClose = closes.get(closes.size() - 2);
-    final double trueRange = Math.max(high - low, Math.max(Math.abs(high - previousClose), Math.abs(low - previousClose)));
-    trueRanges.add(trueRange);
-
     if (this.averageTrueRanges.isEmpty()) {
-      this.averageTrueRanges.add(trueRanges.stream().mapToDouble(value -> value.doubleValue()).sum());
+      this.averageTrueRanges.add(trueRanges.stream().mapToDouble(value -> value.doubleValue()).sum() / period);
     } else {
       double previousAverageTrueRange = averageTrueRanges.get(averageTrueRanges.size() - 1);
-      averageTrueRanges.add(previousAverageTrueRange - (previousAverageTrueRange / period) + trueRanges.get(trueRanges.size() - 1));
+      averageTrueRanges.add((previousAverageTrueRange * (period - 1) + trueRanges.get(trueRanges.size() - 1)) / period);
     }
 
     return Optional.of(averageTrueRanges.get(averageTrueRanges.size() - 1));

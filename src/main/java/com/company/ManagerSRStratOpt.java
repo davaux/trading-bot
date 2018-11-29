@@ -41,9 +41,9 @@ import java.util.Map;
  */
 public class ManagerSRStratOpt {
   public static final String[] PAIRS_ARR = {
-          /*"IOTBTC", "XRPBTC", "BTCUSD", "LTCBTC", "ETHBTC",
+          /*"IOTBTC", "XRPBTC", "BTCUSD", "LTCBTC", */"ETHBTC"/*,
           "NEOBTC", "EOSBTC", "TRXBTC", "QTMBTC",
-          "XTZBTC", */"XLMBTC"/*, "XVGBTC", "VETBTC"*/};
+          "XTZBTC", "XLMBTC", "XVGBTC", "VETBTC"*/};
 
   private Map<String, StategyData> pairs;
   private Map<String, List<ChartData>> chartDataMap;
@@ -54,7 +54,7 @@ public class ManagerSRStratOpt {
   private int losses;
   private double exchangeFees = 0.4; //0.4 pct
   private double accountRiskCoeff = 0.01; //0.01 pct
-  private int atrPeriod = 55;
+  private int atrPeriod = 21;
 
   public ManagerSRStratOpt() {
     pairs = new HashMap<>();
@@ -146,24 +146,34 @@ public class ManagerSRStratOpt {
    * @param time
    */
   private void findTradeOpportunity(String pair, double close, long time) {
-    final double val = Math.abs(pairs.get(pair).getS1Value() - pairs.get(pair).getPpValue()) / 3.0;
+
     if (!pairs.get(pair).isOpenLong() && !pairs.get(pair).isOpenShort()) {
-      if (close <= pairs.get(pair).getS1Value() + val
-              && close >= pairs.get(pair).getS1Value() - val) {
+      if (close <= pairs.get(pair).getS1Value() + pairs.get(pair).getAtrValue()
+              && close >= pairs.get(pair).getS1Value() - pairs.get(pair).getAtrValue()) {
         chartDataRegistry.get(pair).get(time).setEntryPriceLong(close);
         openLongPosition(pair, close);
-      } else if (close >= pairs.get(pair).getR1Value() - val && close <= pairs.get(pair).getR1Value() + val) {
+        chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
+      } else if (close >= pairs.get(pair).getR1Value() - pairs.get(pair).getAtrValue() && close <= pairs.get(pair).getR1Value() + pairs.get(pair).getAtrValue()) {
         chartDataRegistry.get(pair).get(time).setEntryPriceShort(close);
         openShortPosition(pair, close);
+        chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
       }
     } else if (pairs.get(pair).isOpenLong()) {
       if ((close >= pairs.get(pair).getCurrentTradePPValue()
-              || close > (pairs.get(pair).getCurrentTradePPValue() - val))
+              || close > (pairs.get(pair).getCurrentTradePPValue() - pairs.get(pair).getAtrValue()))
               && close > pairs.get(pair).getEntryPrice() * (1 + exchangeFees / 100.0)) {
         successes++;
         pairs.get(pair).setSuccesses(pairs.get(pair).getSuccesses() + 1);
         chartDataRegistry.get(pair).get(time).setExitPriceLong(close);
         closeLongPosition(pair, close);
+
+        // Trade the breakout
+        if (close <= pairs.get(pair).getR1Value() + pairs.get(pair).getAtrValue()
+                && close >= pairs.get(pair).getR1Value()) {
+          chartDataRegistry.get(pair).get(time).setEntryPriceLong(close);
+          openLongPosition(pair, close);
+          chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
+        }
       }
       // check stop loss
       else if (close < pairs.get(pair).getStopLossPrice()) {
@@ -179,6 +189,14 @@ public class ManagerSRStratOpt {
         pairs.get(pair).setSuccesses(pairs.get(pair).getSuccesses() + 1);
         chartDataRegistry.get(pair).get(time).setExitPriceShort(close);
         closeShortPosition(pair, close);
+
+        // Trade the breakout
+        if (close <= pairs.get(pair).getS1Value() + pairs.get(pair).getAtrValue()
+                && close >= pairs.get(pair).getS1Value()) {
+          chartDataRegistry.get(pair).get(time).setEntryPriceLong(close);
+          openShortPosition(pair, close);
+          chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
+        }
       }
       // check stop loss
       else if (close > pairs.get(pair).getStopLossPrice()) {
@@ -191,8 +209,7 @@ public class ManagerSRStratOpt {
   }
 
   private void openLongPosition(String pair, double price) {
-    final double val = Math.abs(pairs.get(pair).getS2Value() - pairs.get(pair).getS1Value()) / 3.0;
-    pairs.get(pair).setStopLossPrice(pairs.get(pair).getS1Value() - val);
+    pairs.get(pair).setStopLossPrice(price - (2 * pairs.get(pair).getAtrValue()));
     pairs.get(pair).setEntryAmount(getPositionSize(pair, price));
     pairs.get(pair).setCurrentTradePPValue(pairs.get(pair).getPpValue());
     bfxTrade.testTrade(pair, price, pairs.get(pair).getEntryAmount(), "buy", "long", new Runnable() {
@@ -212,8 +229,7 @@ public class ManagerSRStratOpt {
   }
 
   private void openShortPosition(String pair, double price) {
-    final double val = Math.abs(pairs.get(pair).getR2Value() - pairs.get(pair).getR1Value()) / 3.0;
-    pairs.get(pair).setStopLossPrice(pairs.get(pair).getR1Value() + val);
+    pairs.get(pair).setStopLossPrice(price + (2 * pairs.get(pair).getAtrValue()));
     pairs.get(pair).setEntryAmount(getPositionSize(pair, price));
     pairs.get(pair).setCurrentTradePPValue(pairs.get(pair).getPpValue());
     bfxTrade.testTrade(pair, price, pairs.get(pair).getEntryAmount(), "sell", "short", new Runnable() {
@@ -391,6 +407,7 @@ public class ManagerSRStratOpt {
     private double support2;
     private double support3;
     private double atrValue;
+    private double stopLossPrice;
 
     public double getAtrValue() {
       return atrValue;
@@ -502,6 +519,14 @@ public class ManagerSRStratOpt {
 
     public void setExitPriceShort(double exitPriceShort) {
       this.exitPriceShort = exitPriceShort;
+    }
+
+    public void setStopLossPrice(double stopLossPrice) {
+      this.stopLossPrice = stopLossPrice;
+    }
+
+    public double getStopLossPrice() {
+      return stopLossPrice;
     }
   }
 
