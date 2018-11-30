@@ -4,7 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class BfxTrade {
-  private double initAmount = 0.002;
+  private double initAmount = 100.0;
   private double makerFeesPct = 0.2;
   private Map<String, Double> reserve = new HashMap<>();
 

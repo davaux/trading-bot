@@ -2,6 +2,7 @@ package com.company;
 
 import com.company.indicators.IndicatorATRAdv;
 import com.company.indicators.IndicatorPPAdv;
+import com.company.indicators.IndicatorStockRSIAdv;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
@@ -41,9 +42,9 @@ import java.util.Map;
  */
 public class ManagerSRStratOpt {
   public static final String[] PAIRS_ARR = {
-          /*"IOTBTC", "XRPBTC", "BTCUSD", "LTCBTC", */"ETHBTC"/*,
+          /*"IOTBTC", "XRPBTC", "BTCUSD", "LTCBTC", "ETHBTC",
           "NEOBTC", "EOSBTC", "TRXBTC", "QTMBTC",
-          "XTZBTC", "XLMBTC", "XVGBTC", "VETBTC"*/};
+          "XTZBTC", "XLMBTC", "XVGBTC", */"VETBTC"};
 
   private Map<String, StategyData> pairs;
   private Map<String, List<ChartData>> chartDataMap;
@@ -68,6 +69,7 @@ public class ManagerSRStratOpt {
       final StategyData stategyData = new StategyData();
       stategyData.setIndicatorPPAdv(new IndicatorPPAdv(new ArrayList<>(), new ArrayList<>(), new ArrayList<>()));
       stategyData.setIndicatorATRAdv(new IndicatorATRAdv(atrPeriod, new ArrayList<>(), new ArrayList<>(), new ArrayList<>()));
+      stategyData.setIndicatorStockRSIAdv(new IndicatorStockRSIAdv(14, new ArrayList<>()));
       pairs.put(pair, stategyData);
       chartDataMap.put(pair, new ArrayList<>());
       chartDataRegistry.put(pair, new HashMap<>());
@@ -120,6 +122,9 @@ public class ManagerSRStratOpt {
   }
 
   private void updateIndicators(String pair, BotCandle candle) {
+    pairs.get(pair).indicatorStockRSIAdv.nextValue(candle.getClose()).ifPresent(value -> {
+      pairs.get(pair).setStockRSIValue(value);
+    });
     pairs.get(pair).indicatorATRAdv.nextValue(candle.getClose(), candle.getHigh(), candle.getLow()).ifPresent(atrValue -> {
       pairs.get(pair).setAtrValue(atrValue);
     });
@@ -149,18 +154,22 @@ public class ManagerSRStratOpt {
 
     if (!pairs.get(pair).isOpenLong() && !pairs.get(pair).isOpenShort()) {
       if (close <= pairs.get(pair).getS1Value() + pairs.get(pair).getAtrValue()
-              && close >= pairs.get(pair).getS1Value() - pairs.get(pair).getAtrValue()) {
+              && close >= pairs.get(pair).getS1Value() - pairs.get(pair).getAtrValue()
+              && pairs.get(pair).getStockRSIValue() < 0.2) {
         chartDataRegistry.get(pair).get(time).setEntryPriceLong(close);
         openLongPosition(pair, close);
         chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
-      } else if (close >= pairs.get(pair).getR1Value() - pairs.get(pair).getAtrValue() && close <= pairs.get(pair).getR1Value() + pairs.get(pair).getAtrValue()) {
+      } else if (close >= pairs.get(pair).getR1Value() - pairs.get(pair).getAtrValue()
+              && close <= pairs.get(pair).getR1Value() + pairs.get(pair).getAtrValue()
+              && pairs.get(pair).getStockRSIValue() > 0.8) {
         chartDataRegistry.get(pair).get(time).setEntryPriceShort(close);
         openShortPosition(pair, close);
         chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
       }
     } else if (pairs.get(pair).isOpenLong()) {
-      if ((close >= pairs.get(pair).getCurrentTradePPValue()
-              || close > (pairs.get(pair).getCurrentTradePPValue() - pairs.get(pair).getAtrValue()))
+      if (close >= pairs.get(pair).getCurrentTradePPValue()
+              && pairs.get(pair).getStockRSIValue() > 0.8
+              /*&& close > (pairs.get(pair).getCurrentTradePPValue() - pairs.get(pair).getAtrValue()))*/
               && close > pairs.get(pair).getEntryPrice() * (1 + exchangeFees / 100.0)) {
         successes++;
         pairs.get(pair).setSuccesses(pairs.get(pair).getSuccesses() + 1);
@@ -168,12 +177,12 @@ public class ManagerSRStratOpt {
         closeLongPosition(pair, close);
 
         // Trade the breakout
-        if (close <= pairs.get(pair).getR1Value() + pairs.get(pair).getAtrValue()
-                && close >= pairs.get(pair).getR1Value()) {
-          chartDataRegistry.get(pair).get(time).setEntryPriceLong(close);
-          openLongPosition(pair, close);
-          chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
-        }
+//        if (close <= pairs.get(pair).getR1Value() + pairs.get(pair).getAtrValue()
+//                && close >= pairs.get(pair).getR1Value()) {
+//          chartDataRegistry.get(pair).get(time).setEntryPriceLong(close);
+//          openLongPosition(pair, close);
+//          chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
+//        }
       }
       // check stop loss
       else if (close < pairs.get(pair).getStopLossPrice()) {
@@ -184,6 +193,7 @@ public class ManagerSRStratOpt {
       }
     } else if (pairs.get(pair).isOpenShort()) {
       if (close <= pairs.get(pair).getCurrentTradePPValue()
+              && pairs.get(pair).getStockRSIValue() < 0.2
               && close < pairs.get(pair).getEntryPrice() * (1 - exchangeFees / 100.0)) {
         successes++;
         pairs.get(pair).setSuccesses(pairs.get(pair).getSuccesses() + 1);
@@ -191,12 +201,12 @@ public class ManagerSRStratOpt {
         closeShortPosition(pair, close);
 
         // Trade the breakout
-        if (close <= pairs.get(pair).getS1Value() + pairs.get(pair).getAtrValue()
-                && close >= pairs.get(pair).getS1Value()) {
-          chartDataRegistry.get(pair).get(time).setEntryPriceLong(close);
-          openShortPosition(pair, close);
-          chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
-        }
+//        if (close <= pairs.get(pair).getS1Value() + pairs.get(pair).getAtrValue()
+//                && close >= pairs.get(pair).getS1Value()) {
+//          chartDataRegistry.get(pair).get(time).setEntryPriceLong(close);
+//          openShortPosition(pair, close);
+//          chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
+//        }
       }
       // check stop loss
       else if (close > pairs.get(pair).getStopLossPrice()) {
@@ -218,7 +228,9 @@ public class ManagerSRStratOpt {
         pairs.get(pair).setOpenLong(true);
         pairs.get(pair).setEntryPrice(price);
         openedPositions++;
-        System.out.println(pair + " pivot point " + pairs.get(pair).getPpValue() + " R1 point " + pairs.get(pair).getR1Value() + " S1 point " + pairs.get(pair).getS1Value() + " ATR " + pairs.get(pair).getAtrValue());
+        System.out.println(pair + " pivot point " + pairs.get(pair).getPpValue() + " R1 point "
+                + pairs.get(pair).getR1Value() + " S1 point " + pairs.get(pair).getS1Value() + " ATR " + pairs.get(pair).getAtrValue()
+                + " Stock RSI " + pairs.get(pair).getStockRSIValue());
         System.out.println(pair + " Opened long position at " + price + " amount " + pairs.get(pair).getEntryAmount());
         System.out.println(pair + " Stop loss price " + pairs.get(pair).getStopLossPrice());
         System.out.println(pair + " Take profit price " + pairs.get(pair).getCurrentTradePPValue());
@@ -350,13 +362,13 @@ public class ManagerSRStratOpt {
 
     double positionSize = Math.min(kellyPositionSize, riskPositionSize);
 
-    System.out.println(pair + " Kelly position coeff " + pairs.get(pair).getKelly() + " trade risk coeff " + tradeRiskCoeff);
-
-    if (kellyPositionSize > riskPositionSize) {
-      System.out.println(pair + " Position is adjusted according to risk position size");
-    } else {
-      System.out.println(pair + " Position is adjusted according to Kelly position size");
-    }
+//    System.out.println(pair + " Kelly position coeff " + pairs.get(pair).getKelly() + " trade risk coeff " + tradeRiskCoeff);
+//
+//    if (kellyPositionSize > riskPositionSize) {
+//      System.out.println(pair + " Position is adjusted according to risk position size");
+//    } else {
+//      System.out.println(pair + " Position is adjusted according to Kelly position size");
+//    }
 
     return positionSize;
   }
@@ -556,6 +568,8 @@ public class ManagerSRStratOpt {
     private double kelly = 0.25;
     private double currentTradePPValue;
     private long startTradeTime;
+    private IndicatorStockRSIAdv indicatorStockRSIAdv;
+    private double stockRSIValue;
 
     public void setStartTradeTime(long startTradeTime) {
       this.startTradeTime = startTradeTime;
@@ -743,6 +757,18 @@ public class ManagerSRStratOpt {
 
     public List<Double> getProfits() {
       return profits;
+    }
+
+    public void setIndicatorStockRSIAdv(IndicatorStockRSIAdv indicatorStockRSIAdv) {
+      this.indicatorStockRSIAdv = indicatorStockRSIAdv;
+    }
+
+    public void setStockRSIValue(Double stockRSIValue) {
+      this.stockRSIValue = stockRSIValue;
+    }
+
+    public Double getStockRSIValue() {
+      return stockRSIValue;
     }
   }
 }
