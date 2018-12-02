@@ -4,25 +4,27 @@ import com.company.indicators.IndicatorATRAdv;
 import com.company.indicators.IndicatorPPAdv;
 import com.company.indicators.IndicatorStockRSIAdv;
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
-import javafx.util.Pair;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.StatusLine;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpResponseException;
+import org.apache.http.client.ResponseHandler;
+import org.apache.http.entity.ContentType;
+import org.json.JSONArray;
 
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.Writer;
+import java.io.*;
 import java.lang.reflect.Type;
+import java.net.URISyntaxException;
+import java.nio.charset.Charset;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Message Broker
@@ -41,14 +43,12 @@ import java.util.Map;
  * - Average Directional Index indicator (0 - 100)
  */
 public class ManagerSRStratOpt {
-  public static final String[] PAIRS_ARR = {
-          /*"IOTBTC", "XRPBTC", "BTCUSD", "LTCBTC", "ETHBTC",
-          "NEOBTC", "EOSBTC", "TRXBTC", "QTMBTC",
-          "XTZBTC", "XLMBTC", "XVGBTC", */"VETBTC"};
+    public static final String[] PAIRS_ARR = {
+            "IOTBTC", "XRPBTC", /*"BTCUSD",*/ "LTCBTC", "ETHBTC",
+            "NEOBTC", "EOSBTC", "TRXBTC", "QTMBTC",
+            "XTZBTC", "XLMBTC", "XVGBTC", "VETBTC"};
 
   private Map<String, StategyData> pairs;
-  private Map<String, List<ChartData>> chartDataMap;
-  private Map<String, Map<Long, ChartData>> chartDataRegistry;
   private BfxTrade bfxTrade;
   private int openedPositions;
   private int successes;
@@ -60,87 +60,217 @@ public class ManagerSRStratOpt {
   public ManagerSRStratOpt() {
     pairs = new HashMap<>();
     bfxTrade = new BfxTrade();
-    chartDataMap = new HashMap<>();
-    chartDataRegistry = new HashMap<>();
   }
 
-  public ManagerSRStratOpt init() {
-    for (String pair : PAIRS_ARR) {
-      final StategyData stategyData = new StategyData();
-      stategyData.setIndicatorPPAdv(new IndicatorPPAdv(new ArrayList<>(), new ArrayList<>(), new ArrayList<>()));
-      stategyData.setIndicatorATRAdv(new IndicatorATRAdv(atrPeriod, new ArrayList<>(), new ArrayList<>(), new ArrayList<>()));
-      stategyData.setIndicatorStockRSIAdv(new IndicatorStockRSIAdv(14, new ArrayList<>()));
-      pairs.put(pair, stategyData);
-      chartDataMap.put(pair, new ArrayList<>());
-      chartDataRegistry.put(pair, new HashMap<>());
-    }
-    return this;
-  }
+    public ManagerSRStratOpt init() {
+        for (String pair : PAIRS_ARR) {
+            try {
+                bfxTrade.getHistData(pair, new ResponseHandler<String>() {
+                    @Override
+                    public String handleResponse(HttpResponse response) throws ClientProtocolException, IOException {
 
-  public void runBot() {
-    final String timeFrame = "15m";
-    final Map<String, List<BotCandle>> marketData = initMarketData(timeFrame);
-    System.out.println("market data 15m size " + marketData.get(PAIRS_ARR[0]).size() + " converted in days " + marketData.get(PAIRS_ARR[0]).size() / 96);
+                        StatusLine statusLine = response.getStatusLine();
+                        HttpEntity entity = response.getEntity();
+                        if (statusLine.getStatusCode() >= 300) {
+                            throw new HttpResponseException(
+                                    statusLine.getStatusCode(),
+                                    statusLine.getReasonPhrase());
+                        }
+                        if (entity == null) {
+                            throw new ClientProtocolException("Response contains no content");
+                        }
 
-    for (int i = 0; i < marketData.get(PAIRS_ARR[0]).size(); i++) {
-      for (String pair : PAIRS_ARR) {
-        if (i < marketData.get(pair).size()) {
-          final BotCandle candle = marketData.get(pair).get(i);
-          if (i == 96) {
-            pairs.get(pair).setStartTradeTime(candle.getTime());
-          }
-          final ChartData chartData = new ChartData();
-          Date date = new Date();
-          date.setTime(candle.getTime());
-          chartData.setDate(new SimpleDateFormat("YYYY-MM-dd HH:mm:ss").format(date));
-          chartData.setPrice(candle.getClose());
-          chartDataRegistry.get(pair).put(candle.getTime(), chartData);
-          updateIndicators(pair, candle);
-          chartDataRegistry.get(pair).get(candle.getTime()).setPpValue(pairs.get(pair).getPpValue());
-          chartDataRegistry.get(pair).get(candle.getTime()).setResistance1(pairs.get(pair).getR1Value());
-          chartDataRegistry.get(pair).get(candle.getTime()).setSupport1(pairs.get(pair).getS1Value());
-          chartDataRegistry.get(pair).get(candle.getTime()).setResistance2(pairs.get(pair).getR2Value());
-          chartDataRegistry.get(pair).get(candle.getTime()).setSupport2(pairs.get(pair).getS2Value());
-          chartDataRegistry.get(pair).get(candle.getTime()).setResistance3(pairs.get(pair).getR3Value());
-          chartDataRegistry.get(pair).get(candle.getTime()).setSupport3(pairs.get(pair).getS3Value());
-          chartDataRegistry.get(pair).get(candle.getTime()).setAtrValue(pairs.get(pair).getAtrValue());
-          chartDataMap.get(pair).add(chartData);
+                        ContentType contentType = ContentType.getOrDefault(entity);
+                        Charset charset = contentType.getCharset();
+                        String collect = new BufferedReader(new InputStreamReader(entity.getContent(), charset))
+                                .lines().collect(Collectors.joining("\n"));
+//                        System.out.println(collect);
+                        JSONArray jsonObject = new JSONArray(collect);
+
+                        final StategyData stategyData = new StategyData();
+                        IndicatorPPAdv indicatorPPAdv = new IndicatorPPAdv(new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+                        IndicatorATRAdv indicatorATRAdv = new IndicatorATRAdv(atrPeriod, new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+                        stategyData.setIndicatorPPAdv(indicatorPPAdv);
+                        stategyData.setIndicatorATRAdv(indicatorATRAdv);
+                        pairs.put(pair, stategyData);
+                        for (int i = 0; i < jsonObject.length(); i++) {
+                            JSONArray jsonArray = jsonObject.getJSONArray(i);
+//                            for (int j = 0; j < jsonArray.length(); j++) {
+                                double close = jsonArray.getDouble(2);
+                                double high = jsonArray.getDouble(3);
+                                double low = jsonArray.getDouble(4);
+                                indicatorPPAdv.nextValue(close, high, low);
+                                indicatorATRAdv.nextValue(close, high, low);
+//                            }
+
+                            if (i == jsonObject.length() - 1) {
+                                BotCandle botCandle = new BotCandle();
+                                botCandle.setTime(jsonArray.getLong(0));
+                                botCandle.setClose(close);
+                                botCandle.setHigh(high);
+                                botCandle.setLow(low);
+                                updateIndicators(pair, botCandle);
+                            }
+                        }
+                        return null;
+                    }
+                });
+            } catch (URISyntaxException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
-      }
+        return this;
     }
+
+    public void runBot() {
+        System.out.println("Initiazing bot");
+        final String timeFrame = "15m";
+        final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+
+
+        long delay = 900000 - System.currentTimeMillis() % 900000;
+        System.out.println("Trading starts in " + (delay / 60000) + " minutes");
+
+        scheduler.scheduleAtFixedRate(new Runnable() {
+            @Override
+            public void run() {
+                synchronized (bfxTrade) {
+                    for (String pair : PAIRS_ARR) {
+//                        System.out.println(pair + " Starting");
+//                    System.out.println(pair + " " + bfxTrade.getPrices().get(pair));
+//                    System.out.println(pair + " " + bfxTrade.getHighPrices().get(pair));
+//                    System.out.println(pair + " " + bfxTrade.getLowPrices().get(pair));
+                        if (bfxTrade.getPrices().containsKey(pair)) {
+                            BotCandle botCandle = new BotCandle();
+                            botCandle.setTime(System.currentTimeMillis());
+                            botCandle.setClose(bfxTrade.getPrices().get(pair));
+                            botCandle.setHigh(bfxTrade.getHighPrices().get(pair));
+                            botCandle.setLow(bfxTrade.getLowPrices().get(pair));
+                            updateIndicators(pair, botCandle);
+                        }
+//                        System.out.println(pair + " Ending");
+                    }
+                    bfxTrade.resetPrices();
+                }
+            }
+        }, (delay / 60000), 15, TimeUnit.MINUTES);
+
+        scheduler.scheduleAtFixedRate(new Runnable() {
+            @Override
+            public void run() {
+                for (String pair : PAIRS_ARR) {
+                    bfxTrade.getTicker(pair, new ResponseHandler<Double>() {
+                        @Override
+                        public Double handleResponse(HttpResponse response) throws ClientProtocolException, IOException {
+                            StatusLine statusLine = response.getStatusLine();
+                            HttpEntity entity = response.getEntity();
+                            if (statusLine.getStatusCode() >= 300) {
+                                throw new HttpResponseException(
+                                        statusLine.getStatusCode(),
+                                        statusLine.getReasonPhrase());
+                            }
+                            if (entity == null) {
+                                throw new ClientProtocolException("Response contains no content");
+                            }
+
+                            ContentType contentType = ContentType.getOrDefault(entity);
+                            Charset charset = contentType.getCharset();
+                            final InputStream content = entity.getContent();
+                            String collect = new BufferedReader(new InputStreamReader(content, charset))
+                                    .lines().collect(Collectors.joining("\n"));
+                            content.close();
+//                            System.out.println(pair + " " + collect);
+                            JSONArray jsonObject = new JSONArray(collect);
+                            double result = jsonObject.getDouble(6);
+                            return result;
+                        }
+                    });
+
+                    synchronized (bfxTrade) {
+                        if (bfxTrade.getPrices().containsKey(pair)) {
+                            findTradeOpportunity(pair, bfxTrade.getPrices().get(pair), System.currentTimeMillis());
+                        }
+                    }
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }, 0, 30, TimeUnit.SECONDS);
+
+        /*final String timeFrame = "15m";
+        final Map<String, List<BotCandle>> marketData = initMarketData(timeFrame);
+        System.out.println("market data 15m size " + marketData.get(PAIRS_ARR[0]).size() + " converted in days " + marketData.get(PAIRS_ARR[0]).size() / 96);
+
+        for (int i = 0; i < marketData.get(PAIRS_ARR[0]).size(); i++) {
+            for (String pair : PAIRS_ARR) {
+                if (i < marketData.get(pair).size()) {
+                    final BotCandle candle = marketData.get(pair).get(i);
+                    if (i == 96) {
+                        pairs.get(pair).setStartTradeTime(candle.getTime());
+                    }
+                    final ChartData chartData = new ChartData();
+                    Date date = new Date();
+                    date.setTime(candle.getTime());
+                    chartData.setDate(new SimpleDateFormat("YYYY-MM-dd HH:mm:ss").format(date));
+                    chartData.setPrice(candle.getClose());
+                    chartDataRegistry.get(pair).put(candle.getTime(), chartData);
+                    updateIndicators(pair, candle);
+                    chartDataRegistry.get(pair).get(candle.getTime()).setPpValue(pairs.get(pair).getPpValue());
+                    chartDataRegistry.get(pair).get(candle.getTime()).setResistance1(pairs.get(pair).getR1Value());
+                    chartDataRegistry.get(pair).get(candle.getTime()).setSupport1(pairs.get(pair).getS1Value());
+                    chartDataRegistry.get(pair).get(candle.getTime()).setResistance2(pairs.get(pair).getR2Value());
+                    chartDataRegistry.get(pair).get(candle.getTime()).setSupport2(pairs.get(pair).getS2Value());
+                    chartDataRegistry.get(pair).get(candle.getTime()).setResistance3(pairs.get(pair).getR3Value());
+                    chartDataRegistry.get(pair).get(candle.getTime()).setSupport3(pairs.get(pair).getS3Value());
+                    chartDataRegistry.get(pair).get(candle.getTime()).setAtrValue(pairs.get(pair).getAtrValue());
+                    chartDataMap.get(pair).add(chartData);
+                }
+            }
+        }*/
 
 //    Gson gson = new GsonBuilder().create();
 //    String json = gson.toJson(chartDataMap);
 //    System.out.println(json);
 
-    try (Writer writer = new FileWriter("BFX_Full_chart_data_" + timeFrame + "_Output.json")) {
-      Gson gson = new GsonBuilder().create();
-      gson.toJson(chartDataMap, writer);
-    } catch (IOException e) {
-      e.printStackTrace();
+//        try (Writer writer = new FileWriter("BFX_Full_chart_data_" + timeFrame + "_Output.json")) {
+//            Gson gson = new GsonBuilder().create();
+//            gson.toJson(chartDataMap, writer);
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
     }
-  }
 
-  private void updateIndicators(String pair, BotCandle candle) {
-    pairs.get(pair).indicatorStockRSIAdv.nextValue(candle.getClose()).ifPresent(value -> {
-      pairs.get(pair).setStockRSIValue(value);
-    });
-    pairs.get(pair).indicatorATRAdv.nextValue(candle.getClose(), candle.getHigh(), candle.getLow()).ifPresent(atrValue -> {
-      pairs.get(pair).setAtrValue(atrValue);
-    });
-    pairs.get(pair).indicatorPPAdv.nextValue(candle.getClose(), candle.getHigh(), candle.getLow()).ifPresent(ppValue -> {
-      pairs.get(pair).setPpValue(ppValue);
-      pairs.get(pair).setR1Value(pairs.get(pair).indicatorPPAdv.getResistance1());
-      pairs.get(pair).setS1Value(pairs.get(pair).indicatorPPAdv.getSupport1());
-      pairs.get(pair).setR2Value(pairs.get(pair).indicatorPPAdv.getResistance2());
-      pairs.get(pair).setS2Value(pairs.get(pair).indicatorPPAdv.getSupport2());
-      pairs.get(pair).setR3Value(pairs.get(pair).indicatorPPAdv.getResistance3());
-      pairs.get(pair).setS3Value(pairs.get(pair).indicatorPPAdv.getSupport3());
-//      System.out.println("pivot point " + pairs.get(pair).getPpValue() + " R1 point " + pairs.get(pair).getR1Value() + " S1 point " + pairs.get(pair).getS1Value() + " ATR " + pairs.get(pair).getAtrValue());
-      findTradeOpportunity(pair, candle.getClose(), candle.getTime());
-      pairs.get(pair).setPreviousPrice(candle.getClose());
-    });
-  }
+    private void updateIndicators(String pair, BotCandle candle) {
+        pairs.get(pair).indicatorATRAdv.nextValue(candle.getClose(), candle.getHigh(), candle.getLow()).ifPresent(atrValue -> {
+            pairs.get(pair).setAtrValue(atrValue);
+        });
+        pairs.get(pair).indicatorPPAdv.nextValue(candle.getClose(), candle.getHigh(), candle.getLow()).ifPresent(ppValue -> {
+            pairs.get(pair).setPpValue(ppValue);
+            pairs.get(pair).setR1Value(pairs.get(pair).indicatorPPAdv.getResistance1());
+            pairs.get(pair).setS1Value(pairs.get(pair).indicatorPPAdv.getSupport1());
+            pairs.get(pair).setR2Value(pairs.get(pair).indicatorPPAdv.getResistance2());
+            pairs.get(pair).setS2Value(pairs.get(pair).indicatorPPAdv.getSupport2());
+            pairs.get(pair).setR3Value(pairs.get(pair).indicatorPPAdv.getResistance3());
+            pairs.get(pair).setS3Value(pairs.get(pair).indicatorPPAdv.getSupport3());
+//            findTradeOpportunity(pair, candle.getClose(), candle.getTime());
+            pairs.get(pair).setPreviousPrice(candle.getClose());
+        });
+        System.out.println(pair + " pivot point " + pairs.get(pair).getPpValue() + " R1 point " + pairs.get(pair).getR1Value() + " S1 point " + pairs.get(pair).getS1Value() + " ATR " + pairs.get(pair).getAtrValue());
+    }
 
   /**
    * Data analyzer
@@ -153,75 +283,64 @@ public class ManagerSRStratOpt {
   private void findTradeOpportunity(String pair, double close, long time) {
 
     if (!pairs.get(pair).isOpenLong() && !pairs.get(pair).isOpenShort()) {
-      if (close <= pairs.get(pair).getS1Value() + pairs.get(pair).getAtrValue()
-              && close >= pairs.get(pair).getS1Value() - pairs.get(pair).getAtrValue()
+      if (close <= pairs.get(pair).getS1Value() + (2 * pairs.get(pair).getAtrValue())
+              && close >= pairs.get(pair).getS1Value() - (2 * pairs.get(pair).getAtrValue())
               && pairs.get(pair).getStockRSIValue() < 0.2) {
-        chartDataRegistry.get(pair).get(time).setEntryPriceLong(close);
         openLongPosition(pair, close);
-        chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
-      } else if (close >= pairs.get(pair).getR1Value() - pairs.get(pair).getAtrValue()
-              && close <= pairs.get(pair).getR1Value() + pairs.get(pair).getAtrValue()
+      } else if (close >= pairs.get(pair).getR1Value() - (2 * pairs.get(pair).getAtrValue())
+              && close <= pairs.get(pair).getR1Value() + (2 * pairs.get(pair).getAtrValue())
               && pairs.get(pair).getStockRSIValue() > 0.8) {
-        chartDataRegistry.get(pair).get(time).setEntryPriceShort(close);
         openShortPosition(pair, close);
-        chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
       }
     } else if (pairs.get(pair).isOpenLong()) {
-      if (close >= pairs.get(pair).getCurrentTradePPValue()
+      if (close >= pairs.get(pair).getPpValue()
               && pairs.get(pair).getStockRSIValue() > 0.8
               /*&& close > (pairs.get(pair).getCurrentTradePPValue() - pairs.get(pair).getAtrValue()))*/
               && close > pairs.get(pair).getEntryPrice() * (1 + exchangeFees / 100.0)) {
         successes++;
         pairs.get(pair).setSuccesses(pairs.get(pair).getSuccesses() + 1);
-        chartDataRegistry.get(pair).get(time).setExitPriceLong(close);
         closeLongPosition(pair, close);
 
         // Trade the breakout
-//        if (close <= pairs.get(pair).getR1Value() + pairs.get(pair).getAtrValue()
-//                && close >= pairs.get(pair).getR1Value()) {
-//          chartDataRegistry.get(pair).get(time).setEntryPriceLong(close);
-//          openLongPosition(pair, close);
-//          chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
-//        }
+        if (close <= pairs.get(pair).getR1Value() + (2 * pairs.get(pair).getAtrValue())
+                && close >= pairs.get(pair).getR1Value() - (2 * pairs.get(pair).getAtrValue())) {
+          openLongPosition(pair, close);
+            System.out.println("Trade the breakout");
+        }
       }
       // check stop loss
       else if (close < pairs.get(pair).getStopLossPrice()) {
         losses++;
         pairs.get(pair).setLosses(pairs.get(pair).getLosses() + 1);
-        chartDataRegistry.get(pair).get(time).setExitPriceLong(pairs.get(pair).getStopLossPrice());
         closeLongPosition(pair, pairs.get(pair).getStopLossPrice());
       }
     } else if (pairs.get(pair).isOpenShort()) {
-      if (close <= pairs.get(pair).getCurrentTradePPValue()
-              && pairs.get(pair).getStockRSIValue() < 0.2
+      if (close <= pairs.get(pair).getPpValue()
               && close < pairs.get(pair).getEntryPrice() * (1 - exchangeFees / 100.0)) {
         successes++;
         pairs.get(pair).setSuccesses(pairs.get(pair).getSuccesses() + 1);
-        chartDataRegistry.get(pair).get(time).setExitPriceShort(close);
         closeShortPosition(pair, close);
 
         // Trade the breakout
-//        if (close <= pairs.get(pair).getS1Value() + pairs.get(pair).getAtrValue()
-//                && close >= pairs.get(pair).getS1Value()) {
-//          chartDataRegistry.get(pair).get(time).setEntryPriceLong(close);
-//          openShortPosition(pair, close);
-//          chartDataRegistry.get(pair).get(time).setStopLossPrice(pairs.get(pair).getStopLossPrice());
-//        }
+        if (close <= pairs.get(pair).getS1Value() + (2 * pairs.get(pair).getAtrValue())
+                && close >= pairs.get(pair).getS1Value() - (2 * pairs.get(pair).getAtrValue())) {
+          openShortPosition(pair, close);
+            System.out.println("Trade the breakout");
+        }
       }
       // check stop loss
       else if (close > pairs.get(pair).getStopLossPrice()) {
         losses++;
         pairs.get(pair).setLosses(pairs.get(pair).getLosses() + 1);
-        chartDataRegistry.get(pair).get(time).setExitPriceShort(pairs.get(pair).getStopLossPrice());
         closeShortPosition(pair, pairs.get(pair).getStopLossPrice());
       }
     }
   }
 
   private void openLongPosition(String pair, double price) {
-    pairs.get(pair).setStopLossPrice(price - (2 * pairs.get(pair).getAtrValue()));
+    pairs.get(pair).setStopLossPrice(price - (1 * pairs.get(pair).getAtrValue()));
     pairs.get(pair).setEntryAmount(getPositionSize(pair, price));
-    pairs.get(pair).setCurrentTradePPValue(pairs.get(pair).getPpValue());
+//    pairs.get(pair).setCurrentTradePPValue(pairs.get(pair).getPpValue());
     bfxTrade.testTrade(pair, price, pairs.get(pair).getEntryAmount(), "buy", "long", new Runnable() {
       @Override
       public void run() {
@@ -233,7 +352,7 @@ public class ManagerSRStratOpt {
                 + " Stock RSI " + pairs.get(pair).getStockRSIValue());
         System.out.println(pair + " Opened long position at " + price + " amount " + pairs.get(pair).getEntryAmount());
         System.out.println(pair + " Stop loss price " + pairs.get(pair).getStopLossPrice());
-        System.out.println(pair + " Take profit price " + pairs.get(pair).getCurrentTradePPValue());
+        System.out.println(pair + " Take profit price " + pairs.get(pair).getPpValue());
         System.out.println(pair + " Opened positions " + openedPositions);
         System.out.println("---------------------------------------------------------------------------------------------");
       }
@@ -241,9 +360,9 @@ public class ManagerSRStratOpt {
   }
 
   private void openShortPosition(String pair, double price) {
-    pairs.get(pair).setStopLossPrice(price + (2 * pairs.get(pair).getAtrValue()));
+    pairs.get(pair).setStopLossPrice(price + (1 * pairs.get(pair).getAtrValue()));
     pairs.get(pair).setEntryAmount(getPositionSize(pair, price));
-    pairs.get(pair).setCurrentTradePPValue(pairs.get(pair).getPpValue());
+//    pairs.get(pair).setCurrentTradePPValue(pairs.get(pair).getPpValue());
     bfxTrade.testTrade(pair, price, pairs.get(pair).getEntryAmount(), "sell", "short", new Runnable() {
       @Override
       public void run() {
@@ -253,7 +372,7 @@ public class ManagerSRStratOpt {
         System.out.println(pair + " pivot point " + pairs.get(pair).getPpValue() + " R1 point " + pairs.get(pair).getR1Value() + " S1 point " + pairs.get(pair).getS1Value() + " ATR " + pairs.get(pair).getAtrValue());
         System.out.println(pair + " Opened short position at " + price + " amount " + pairs.get(pair).getEntryAmount());
         System.out.println(pair + " Stop loss price " + pairs.get(pair).getStopLossPrice());
-        System.out.println(pair + " Take profit price " + pairs.get(pair).getCurrentTradePPValue());
+        System.out.println(pair + " Take profit price " + pairs.get(pair).getPpValue());
         System.out.println(pair + " Opened positions " + openedPositions);
         System.out.println("---------------------------------------------------------------------------------------------");
       }
@@ -278,7 +397,7 @@ public class ManagerSRStratOpt {
         pairs.get(pair).setEntryAmount(0.0);
         pairs.get(pair).setEntryPrice(0.0);
         pairs.get(pair).setOpenLong(false);
-        pairs.get(pair).setCurrentTradePPValue(0.0);
+//        pairs.get(pair).setCurrentTradePPValue(0.0);
         openedPositions--;
       }
     });
@@ -302,7 +421,7 @@ public class ManagerSRStratOpt {
         pairs.get(pair).setEntryAmount(0.0);
         pairs.get(pair).setEntryPrice(0.0);
         pairs.get(pair).setOpenShort(false);
-        pairs.get(pair).setCurrentTradePPValue(0.0);
+//        pairs.get(pair).setCurrentTradePPValue(0.0);
         openedPositions--;
       }
     });
@@ -362,13 +481,13 @@ public class ManagerSRStratOpt {
 
     double positionSize = Math.min(kellyPositionSize, riskPositionSize);
 
-//    System.out.println(pair + " Kelly position coeff " + pairs.get(pair).getKelly() + " trade risk coeff " + tradeRiskCoeff);
-//
-//    if (kellyPositionSize > riskPositionSize) {
-//      System.out.println(pair + " Position is adjusted according to risk position size");
-//    } else {
-//      System.out.println(pair + " Position is adjusted according to Kelly position size");
-//    }
+    System.out.println(pair + " Kelly position coeff " + pairs.get(pair).getKelly() + " trade risk coeff " + tradeRiskCoeff);
+
+    if (kellyPositionSize > riskPositionSize) {
+      System.out.println(pair + " Position is adjusted according to risk position size");
+    } else {
+      System.out.println(pair + " Position is adjusted according to Kelly position size");
+    }
 
     return positionSize;
   }
@@ -566,7 +685,7 @@ public class ManagerSRStratOpt {
     private List<Double> profits = new ArrayList<>();
     private List<Double> profitsInPct = new ArrayList<>();
     private double kelly = 0.25;
-    private double currentTradePPValue;
+//    private double currentTradePPValue;
     private long startTradeTime;
     private IndicatorStockRSIAdv indicatorStockRSIAdv;
     private double stockRSIValue;
@@ -579,13 +698,13 @@ public class ManagerSRStratOpt {
       return startTradeTime;
     }
 
-    public void setCurrentTradePPValue(double currentTradePPValue) {
-      this.currentTradePPValue = currentTradePPValue;
-    }
+//    public void setCurrentTradePPValue(double currentTradePPValue) {
+//      this.currentTradePPValue = currentTradePPValue;
+//    }
 
-    public double getCurrentTradePPValue() {
-      return currentTradePPValue;
-    }
+//    public double getCurrentTradePPValue() {
+//      return currentTradePPValue;
+//    }
 
     public double getKelly() {
       return kelly;
